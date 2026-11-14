@@ -51,5 +51,5 @@ Pick any place on the Moon and any day, and see in seconds whether a lander ther
 - _TODO: add every outside resource with its license_
 
 
-Team Name: Red K 
-agastya singh, arnav singh, arsh johari, pratham tomar
+Team Name: Red K   
+  **agastya singh, arnav singh, arsh johari, pratham tomar**
