@@ -16,6 +16,14 @@ const VIEW = {
 const viewFor = (site) =>
   VIEW[site.id] ?? { lat: THREE.MathUtils.clamp(site.lat * 0.62, -52, 52), lon: site.lonE - 9 };
 const EXTRA_PIN = '__extra';
+// Home screen framing: the Moon fills the bottom of a full-window canvas as a lit horizon.
+const HOME = {
+  widthShare: 0.54, // Moon radius as a share of the window width
+  heightShare: 0.78, // or of the height, whichever is larger (tall phone screens)
+  limbAt: 0.7, // the top of the Moon sits this far down the window
+  drift: 0.35, // OrbitControls auto-rotate speed, so the terminator slowly moves
+  towardSun: 0.4, // how far the camera leans to the lit side
+};
 
 function greatCircle(color, dashed) {
   const pts = [];
@@ -385,12 +393,25 @@ export function createGlobe(container, sites) {
     const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
     fitDist = 1.12 / Math.sin(Math.min(vHalf, hHalf));
+    if (mode === 'home') {
+      // Zoom in and slide the view down, so only the top of the Moon shows. The canvas stays
+      // the size of the window, so the horizon is drawn at full resolution.
+      const radiusPx = ((h / 2) * Math.tan(Math.asin(1 / fitDist))) / Math.tan(vHalf);
+      const target = Math.max(HOME.widthShare * w, HOME.heightShare * h);
+      camera.zoom = target / radiusPx;
+      camera.setViewOffset(w, h, 0, -(HOME.limbAt * h + target - h / 2), w, h);
+    } else {
+      camera.zoom = 1;
+      camera.clearViewOffset();
+    }
+    camera.updateProjectionMatrix();
     travel.setPxPerUnit(renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan(vHalf)));
     controls.maxDistance = fitDist * 1.8;
     if (!camAnim && state.site) camera.position.setLength(fitDist);
     loop.invalidate();
   }
   let fitDist = 3.6;
+  let mode = 'site';
   const camDir = new THREE.Vector3();
 
   const loop = renderLoop(container, (now) => {
@@ -464,7 +485,8 @@ export function createGlobe(container, sites) {
       state.siteDir = to;
       pins[EXTRA_PIN].g.visible = !preset;
       if (!preset) placePin(pins[EXTRA_PIN], site);
-      frameSite(site, state.siteKey !== null);
+      state.siteObj = site;
+      if (mode === 'site') frameSite(site, state.siteKey !== null);
       state.siteKey = siteKey;
       state.site = preset ? site.id : EXTRA_PIN;
     }
@@ -483,6 +505,30 @@ export function createGlobe(container, sites) {
     loop.invalidate();
   }
 
+  /** 'home' turns the globe into the opening horizon. 'site' is the navigator's whole-Moon view. */
+  function setMode(next) {
+    if (next === mode) return;
+    mode = next;
+    if (camAnim) {
+      camAnim = null;
+      loop.release();
+    }
+    controls.autoRotate = mode === 'home' && !reduceMotion;
+    controls.autoRotateSpeed = HOME.drift;
+    resize();
+    if (mode === 'home') {
+      // Look across the sunlight, so the day and night line crosses the horizon.
+      const side = new THREE.Vector3().crossVectors(UP, state.sunDir);
+      if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+      side.normalize().addScaledVector(state.sunDir, HOME.towardSun).normalize();
+      camera.position.copy(side).multiplyScalar(fitDist);
+      camera.lookAt(0, 0, 0);
+    } else if (state.siteObj) {
+      frameSite(state.siteObj, false);
+    }
+    loop.invalidate();
+  }
+
   resize();
-  return { update };
+  return { update, setMode };
 }

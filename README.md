@@ -78,6 +78,9 @@ src/ephemeris.js  loads the bundled table in the browser
 src/eclipse.js    when Earth covers the Sun at a site, fully or partly
 src/slips.js      the same 72 h analysis for every slip from 0 to 30 days, and the ranking
 src/slipstrip.js  the slip strip view
+src/unseen.css    the look: loads after styles.css and restyles it
+src/chrome.js     header, menu, cursor ring, the opening, and the switch between home and the navigator
+src/fonts/        Inter and Newsreader (SIL OFL 1.1), licences included
 src/format.js     all display rounding (after calculation)
 src/timeline.js   availability bars + shared cursor
 src/skystrip.js   2D horizon strip (SVG)
@@ -117,6 +120,14 @@ Not yet done:
 - Partial cover of the Sun is marked but still counted as full sunlight.
 - The slip strip and eclipse flag were checked in the production build at desktop width and at 375 px. They have not been checked on a real phone.
 - Real terrain. Near the poles a ridge can hide the Sun or Earth while this model shows it up.
+
+## Design
+
+The look follows [unseen.co](https://unseen.co): a one-screen home over a live 3D scene, a transparent header with rolling nav letters, white pills and discs, a menu panel from the right, a cursor ring, and a dark long-scroll page for the tool. Layout, type scale and motion were matched to measurements of that site. All code here is original, and none of unseen's code, fonts, images or copy is used. Inter and Newsreader stand in for its two typefaces. The two small icons (arrow and close) are from Phosphor Icons (MIT).
+
+The home screen is the same globe as the navigator, zoomed until the Moon is a horizon. The day and night line on it comes from the JPL Sun direction for the plan on screen.
+
+Not done in this pass: sound, a film grain pass, and a real lunar surface map on the globe (it is still the procedural texture). The look was checked in Chrome at 1440, 1920, 1024 and 390 wide, with reduced motion, and with a shared link. It has not been checked in Safari or Firefox, or on a real phone.
 
 ## Credits
 

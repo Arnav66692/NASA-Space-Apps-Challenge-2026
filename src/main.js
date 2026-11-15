@@ -2,6 +2,7 @@ import '@fontsource-variable/inter';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import './styles.css';
+import './unseen.css';
 
 import { DATASETS, SITES, FEATURED, PRESET_START_MS, PRESET_SLIP_DAYS, customSite, scenarioLabel } from './data.js';
 import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, eclipseAt, HOUR_MS } from './calc.js';
@@ -15,6 +16,7 @@ import { createSlipStrip } from './slipstrip.js';
 import { icon } from './icons.js';
 import { WINDOW_HOURS } from './window.js';
 import { loadEphemeris } from './ephemeris.js';
+import { initChrome } from './chrome.js';
 import { eclipseIntervals } from './eclipse.js';
 import { analyzeStay, slipSeries, rankSlips, slipCell } from './slips.js';
 
@@ -741,6 +743,7 @@ $('#sites-list').innerHTML = Object.values(SITES)
 buildSitePicker();
 buildScenarioSwitch();
 buildScrubTicks();
+const chrome = initChrome();
 
 // A shared address that points at a reference plan can open at once. Anything
 // else waits for the Moon table.
@@ -804,6 +807,7 @@ if (webglOk()) {
     .then(([g, s, geo]) => {
       toMoonFixed = geo.azElToMoonFixed;
       globe = g.createGlobe($('#globe'), FEATURED);
+      chrome.setGlobe(globe);
       surface = s.createSurface($('#surface'));
       document.body.classList.add('has-3d');
       render({ quiet: true });
