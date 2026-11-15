@@ -578,3 +578,73 @@ html.js:not(.clock-on) .clock { opacity: 0; transform: translateY(1.2rem); point
 .m-grid > .will-reveal:nth-child(2) { transition-delay: 0.08s; }
 .m-grid > .will-reveal:nth-child(3) { transition-delay: 0.16s; }
 html[data-page="home"] .globe-wrap.will-reveal { opacity: 1; transform: none; transition: none; }
+
+/* ───────────── Bands: flat, exact bars on a hairline rail ─────────────
+   The hatch and dot fills are gone. Each row is already named and has its own icon, so the
+   fill does not need to carry the meaning. A 1px rail marks the time a body is below the
+   horizon, and faint guides mark each 24 hours. */
+.tl-grid { gap: 1.6rem; }
+.tl-rows { gap: 0.35rem; }
+.tl-track {
+  height: 2.1rem; border-radius: 0; box-shadow: none; background-color: transparent;
+  background-image:
+    linear-gradient(var(--night-line-2), var(--night-line-2)),
+    linear-gradient(var(--night-line), var(--night-line)),
+    linear-gradient(var(--night-line), var(--night-line));
+  background-size: 100% 1px, 1px 100%, 1px 100%;
+  background-position: 0 50%, 33.333% 0, 66.667% 0;
+  background-repeat: no-repeat;
+}
+.tl-row.both .tl-track { height: 1.3rem; }
+.seg-bar { top: 0.3rem; bottom: 0.3rem; border-radius: 0; }
+.seg-bar.sun { background: var(--sun); }
+.seg-bar.earth { background: var(--earth); }
+.seg-bar.both { top: 0.42rem; bottom: 0.42rem; background: var(--night-ink); }
+.tl-panel:not(.is-active) { opacity: 0.62; }
+.tl-whole { padding: 0 0.7rem; border-radius: 0; font-size: 0.66rem; letter-spacing: 0.04em; }
+.tl-whole.above { background: none; color: #1c1403; font-weight: 500; }
+.tl-row.earth .tl-whole.above { color: #06203f; }
+.tl-row.both .tl-whole.above { display: none; }
+.tl-whole.below { background: var(--night); color: var(--night-2); }
+.tl-row.both .tl-whole { font-size: 0.62rem; padding: 0 0.6rem; }
+/* Rise and set: a hairline through the row with a small cap. */
+.tl-ev { top: 0; bottom: 0; }
+.tl-ev-tick { left: 0; width: 1px; background: var(--night-ink); }
+.tl-ev-tick::after { left: -3px; top: -1px; border-width: 3.5px; border-top-color: var(--night-ink); }
+.tl-ev.rise .tl-ev-tick::after { bottom: -1px; border-bottom-color: var(--night-ink); }
+.tl-ev-label { font-size: 0.72rem; line-height: 1.2; padding: 0.22rem 0.6rem; background: var(--night); border-color: var(--night-line-2); }
+.tl-ev.right .tl-ev-label { left: 0.55rem; }
+.tl-ev.left .tl-ev-label { right: 0.55rem; }
+.tl-tcur { top: -0.25rem; bottom: -0.25rem; border-left-width: 1px; box-shadow: none; }
+.tl-cursor { border-left-width: 1px; }
+.tl-tick { border-color: var(--night-line-2); }
+.tl-tick.major { border-color: var(--night-2); }
+/* Earth in front of the Sun: a fine hatch over the gap it leaves in the Sun band. */
+.seg-ecl { top: 0.3rem; bottom: 0.3rem; border-radius: 0; }
+.seg-ecl.total { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--night-ink) 3px 4px); box-shadow: inset 0 0 0 1px var(--night-ink); }
+.seg-ecl.partial { border: 0; background: rgb(10 10 10 / 0.22); box-shadow: inset 0 0 0 1px rgb(10 10 10 / 0.6); }
+
+/* Slip strip: bars on one baseline, no boxes. */
+.slips-grid { gap: 0; padding-top: 1.1rem; min-height: 0; }
+.slip-cell { padding: 0 0 1.25rem; }
+.slip-bars { height: 4.4rem; padding: 0 0.12rem; gap: 1px; border-radius: 0; background: none; box-shadow: none; border-bottom: 1px solid var(--night-line-2); transition: background-color 0.3s; }
+.sb { border-radius: 0; }
+.sb.both { background: var(--night-ink); }
+.slip-cell:hover .slip-bars, .slip-cell:focus-visible .slip-bars { box-shadow: none; background: rgb(241 237 235 / 0.07); }
+.slip-cell.is-slip .slip-bars { box-shadow: none; background: rgb(241 237 235 / 0.07); }
+.slip-cell.is-shown .slip-bars { background: rgb(241 237 235 / 0.13); box-shadow: none; border-bottom-color: var(--night-ink); }
+.slip-d { font-size: 0.66rem; }
+.slip-mark { top: -0.85rem; font-size: 0.5rem; }
+.slips-legend i { border-radius: 0; width: 0.5rem; height: 0.5rem; }
+.sl-both { background: var(--night-ink); }
+.m-both .m-mini i { background: var(--night-ink); }
+.tl-total, .clock-scn button { white-space: nowrap; }
+@media (max-width: 640px) {
+  .tl-grid { --tot: 3.6rem; }
+  .tl-total b { font-size: 1.05rem; }
+  .tl-scn { font-size: 1.2rem; }
+  /* The panel head already names the eclipse and its times. The label on the bar has no room here. */
+  .tl-ev.ecl .tl-ev-label { display: none; }
+  .tl-whole { font-size: 0.58rem; padding: 0 0.4rem; }
+  .clock-scn button { padding: 0.45rem 0.7rem; gap: 0.3rem; }
+}

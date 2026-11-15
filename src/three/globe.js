@@ -282,6 +282,7 @@ export function createGlobe(container, sites) {
     uSunDir: { value: new THREE.Vector3(1, 0, 0) },
     uSunColor: { value: new THREE.Color(SUN_LIGHT.color).multiplyScalar(SUN_LIGHT.intensity) },
   };
+  moon.material.dithering = true; // no visible steps in the dark side's slow falloff
   moon.material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, sunUniforms);
     shader.fragmentShader = shader.fragmentShader
