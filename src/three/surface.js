@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { regolithTexture, glowTexture, starfield, rng } from './textures.js';
-import { azElToLocal, renderLoop } from './geo.js';
+import { azElToLocal, renderLoop, easeInOut } from './geo.js';
+import { fitSurfaceCamera, fitOverhead, poseBasis, FIT } from './surfaceFrame.js';
 import { fmtDeg } from '../format.js';
 
 const SKY_R = 1400;
@@ -60,7 +61,31 @@ function groundGeometry() {
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
-  return g;
+  return { geometry: g, height };
+}
+
+/**
+ * Regolith material that hides the texture's repeat: two samples at unrelated
+ * scales and rotations, contrast-restored, under a slow brightness variation.
+ */
+function groundMaterial(tex) {
+  const mat = new THREE.MeshStandardMaterial({ map: tex, color: 0x9a968f, roughness: 1, metalness: 0 });
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+        vec4 tA = texture2D(map, vMapUv);
+        vec2 uvB = mat2(0.8, -0.6, 0.6, 0.8) * vMapUv * 0.381 + vec2(0.37, 0.11);
+        vec4 tB = texture2D(map, uvB);
+        vec3 detail = (tA.rgb + tB.rgb) * 0.5;
+        detail = max(vec3(0.0), (detail - 0.21) * 1.38 + 0.21); // averaging halves contrast; restore it
+        float macro = texture2D(map, mat2(0.6, 0.8, -0.8, 0.6) * vMapUv * 0.047 + vec2(0.5, 0.2)).r;
+        detail *= 0.82 + 0.36 * smoothstep(0.12, 0.34, macro);
+        diffuseColor *= vec4(detail, 1.0);
+      #endif`,
+    );
+  };
+  return mat;
 }
 
 function buildLander() {
@@ -141,6 +166,7 @@ function buildLander() {
 }
 
 export function createSurface(container) {
+  const wrap = container.parentElement;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -156,35 +182,64 @@ export function createSurface(container) {
   container.appendChild(labels.domElement);
 
   const scene = new THREE.Scene();
+
+  // ───────────── Camera: orbits the lander; a vertical lens shift makes room for a high sky ─────────────
+  const TARGET = new THREE.Vector3(0, FIT.targetY, 0);
+  const DIST = { min: 6, max: 28 };
+  const homeDist = () => (container.clientWidth < 520 ? 18 : 15);
+  const EYE_CLEARANCE = 0.6; // metres the camera keeps above the ground under it
+
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 4000);
+  let lensShift = 0; // in half-heights; positive moves the picture up (the lander down)
+  const baseProjection = camera.updateProjectionMatrix.bind(camera);
+  camera.updateProjectionMatrix = () => {
+    baseProjection();
+    // Off-axis frustum: same as top/bottom = t(1 ± s). Verticals stay vertical.
+    camera.projectionMatrix.elements[9] = lensShift;
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+  };
+
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 4.2, 0);
+  controls.target.copy(TARGET);
   controls.enablePan = false;
+  controls.enableZoom = false; // zoom: buttons, or ctrl/⌘ + wheel (below)
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 7;
-  controls.maxDistance = 38;
-  controls.minPolarAngle = THREE.MathUtils.degToRad(50);
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(97);
-  controls.enableZoom = false;
-  renderer.domElement.addEventListener(
-    'wheel',
-    (e) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      const off = camera.position.clone().sub(controls.target);
-      off.setLength(Math.min(Math.max(off.length() * (1 + Math.sign(e.deltaY) * 0.08), controls.minDistance), controls.maxDistance));
-      camera.position.copy(controls.target).add(off);
-      loop.invalidate();
-    },
-    { passive: false },
-  );
+  controls.minDistance = DIST.min;
+  controls.maxDistance = DIST.max;
+  controls.minPolarAngle = THREE.MathUtils.degToRad(38); // no steep top-down views
+  controls.maxPolarAngle = THREE.MathUtils.degToRad(95); // the ground clamp below does the rest
+
+  /** Heading (azimuth looked toward), elevation above the lander centre, distance. */
+  function currentPose() {
+    const off = camera.position.clone().sub(TARGET);
+    const dist = off.length();
+    return {
+      yaw: (THREE.MathUtils.radToDeg(Math.atan2(-off.x, off.z)) + 360) % 360,
+      elev: THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(off.y / dist, -1, 1))),
+      dist,
+    };
+  }
+  function placeCamera(pose) {
+    camera.position.fromArray(poseBasis(pose).pos);
+  }
 
   // Ground
   const tex = regolithTexture();
-  const ground = new THREE.Mesh(groundGeometry(), new THREE.MeshStandardMaterial({ map: tex, color: 0x9a968f, roughness: 1, metalness: 0 }));
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const { geometry: groundGeo, height: groundHeight } = groundGeometry();
+  const ground = new THREE.Mesh(groundGeo, groundMaterial(tex));
   ground.receiveShadow = true;
   scene.add(ground);
+
+  /** Keep the eye above the terrain directly under it (crater rims included). */
+  function clampToGround() {
+    const floor = groundHeight(camera.position.x, camera.position.z) + EYE_CLEARANCE;
+    if (camera.position.y >= floor) return false;
+    camera.position.y = floor;
+    camera.lookAt(camAnim ? lookNow : controls.target);
+    return true;
+  }
 
   // Stars (only above the horizon; the ground hides the rest anyway)
   scene.add(starfield(2600, SKY_R * 1.4, 21, -50));
@@ -265,12 +320,263 @@ export function createSurface(container) {
   const sunLbl = mkLabel('lbl-body lbl-sun');
   const earthLbl = mkLabel('lbl-body lbl-earth');
 
-  const loop = renderLoop(container, () => {
-    if (controls.update()) loop.invalidate();
+  // ───────────── Overlay controls: zoom, recentre, back-to-lander, sky dome ─────────────
+  const ctrl = document.createElement('div');
+  ctrl.className = 'surf-ctrl';
+  ctrl.innerHTML = `
+    <button type="button" data-z="in" aria-label="Zoom in">${svgIcon('M12 5v14M5 12h14')}</button>
+    <button type="button" data-z="out" aria-label="Zoom out">${svgIcon('M5 12h14')}</button>
+    <button type="button" data-z="home" aria-label="Recentre on the lander">${svgIcon('M12 3v4M12 17v4M3 12h4M17 12h4M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6')}</button>`;
+  wrap.appendChild(ctrl);
+  ctrl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-z]');
+    if (!b) return;
+    if (b.dataset.z === 'in') zoomBy(1 / ZOOM_STEP);
+    else if (b.dataset.z === 'out') zoomBy(ZOOM_STEP);
+    else recentre();
+  });
+
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'sky-back';
+  backBtn.hidden = true;
+  backBtn.innerHTML = '<span aria-hidden="true">↓</span> Back to lander';
+  backBtn.addEventListener('click', () => backToLander());
+  wrap.appendChild(backBtn);
+
+  const dome = createSkyDome(wrap);
+
+  // Edge markers: when a body that is up sits off screen, a chip on the frame's
+  // edge points toward it. Clicking it turns toward that body.
+  const edgeTags = {};
+  for (const body of ['sun', 'earth']) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `edge-tag edge-${body}`;
+    b.hidden = true;
+    b.addEventListener('click', () => focusBody(body));
+    wrap.appendChild(b);
+    edgeTags[body] = b;
+  }
+  const projected = new THREE.Vector3();
+  const hudEl = wrap.querySelector('.surface-hud');
+  const hudBottom = () => (hudEl ? hudEl.offsetTop + hudEl.offsetHeight : 0);
+  const domeRect = () => {
+    const el = dome.el;
+    return el.hidden ? null : { l: el.offsetLeft, t: el.offsetTop, r: el.offsetLeft + el.offsetWidth, b: el.offsetTop + el.offsetHeight };
+  };
+
+  function placeEdgeTags() {
+    const w = container.clientWidth, h = container.clientHeight;
+    const dr = domeRect();
+    let placed = null;
+    for (const [body, el] of Object.entries(edgeTags)) {
+      const s = lastSample?.[body];
+      if (!s || s.el <= 0 || !w) {
+        el.hidden = true;
+        continue;
+      }
+      projected.copy(azElToLocal(s.az, s.el)).multiplyScalar(SKY_R).project(camera);
+      // project() mirrors points behind the camera; flip them back.
+      const behind = projected.z > 1;
+      let x = behind ? -projected.x : projected.x;
+      let y = behind ? -projected.y : projected.y;
+      if (!behind && Math.abs(x) <= 1 && Math.abs(y) <= 1) {
+        el.hidden = true;
+        continue;
+      }
+      if (behind && Math.abs(x) < 1e-3 && Math.abs(y) < 1e-3) x = 1;
+      // Clamp the direction from screen centre to an inset rectangle below the HUD.
+      const ax = (w / 2 - 70) / (w / 2);
+      const ayTop = (h / 2 - Math.max(30, hudBottom() + 18)) / (h / 2), ayBot = (h / 2 - 64) / (h / 2);
+      const ay = y > 0 ? ayTop : ayBot;
+      const k = Math.min(ax / Math.abs(x || 1e-6), ay / Math.abs(y || 1e-6));
+      x *= k;
+      y *= k;
+      const angle = Math.atan2(-y * h, x * w); // screen angle, y down
+      let px = ((x + 1) / 2) * w, py = ((1 - y) / 2) * h;
+      // Keep clear of the sky dome.
+      if (dr && px > dr.l - 70 && px < dr.r + 70 && py > dr.t - 16 && py < dr.b + 16) {
+        py = dr.t < h / 2 ? dr.b + 20 : dr.t - 20;
+      }
+      // Both bodies off the same edge: stack the second chip instead of overlapping.
+      if (placed && Math.abs(px - placed[0]) < 120 && Math.abs(py - placed[1]) < 30) {
+        py = placed[1] + (placed[1] > h / 2 ? -30 : 30);
+      }
+      placed = [px, py];
+      el.hidden = false;
+      el.style.left = `${px}px`;
+      el.style.top = `${py}px`;
+      el.style.setProperty('--a', `${angle}rad`);
+      const name = body === 'sun' ? 'Sun' : 'Earth';
+      el.innerHTML = `<span class="edge-arrow" aria-hidden="true">➜</span><b>${name}</b> <span class="num">${fmtDeg(s.el)}</span>`;
+      el.setAttribute('aria-label', `${name} is off screen at ${fmtDeg(s.el)} elevation. Turn the view toward it.`);
+    }
+  }
+
+  // ───────────── Camera motion ─────────────
+  // Two modes. 'orbit': the camera circles the lander and looks at its centre.
+  // 'overhead': the Sun or Earth is too high to frame with the whole lander, so the
+  // camera stands low beside it and looks up past it; dragging then turns the view
+  // in place (the pivot sits just in front of the lens), up to nearly the zenith.
+  let mode = 'orbit';
+  const LOOK_PIVOT = 0.6;
+  let camAnim = null;
+  let zoomGoal = null;
+  const ZOOM_STEP = 1.1; // one button press: 10% closer or further (orbit), or 10% field of view (overhead)
+  const lookNow = new THREE.Vector3().copy(TARGET);
+  const tmpPos = new THREE.Vector3();
+  // Keep the render loop running while a tween or a zoom is in flight.
+  let held = false;
+  function syncHold() {
+    const want = Boolean(camAnim) || zoomGoal !== null;
+    if (want && !held) loop.hold();
+    if (!want && held) loop.release();
+    held = want;
+  }
+
+  function setMode(next) {
+    mode = next;
+    backBtn.hidden = next !== 'overhead';
+    wrap.classList.toggle('is-overhead', next === 'overhead');
+    if (next === 'orbit') {
+      controls.minDistance = DIST.min;
+      controls.maxDistance = DIST.max;
+      controls.minPolarAngle = THREE.MathUtils.degToRad(38); // no steep top-down views
+      controls.maxPolarAngle = THREE.MathUtils.degToRad(95); // the ground clamp does the rest
+      controls.rotateSpeed = 1;
+    } else {
+      controls.minDistance = controls.maxDistance = LOOK_PIVOT;
+      controls.minPolarAngle = THREE.MathUtils.degToRad(60); // look down at most 30°
+      controls.maxPolarAngle = THREE.MathUtils.degToRad(176); // and up to almost straight overhead
+      controls.rotateSpeed = 0.5;
+    }
+  }
+
+  /** Where the camera is and what it is looking at. */
+  function camState() {
+    let look;
+    if (camAnim) look = lookNow.clone();
+    else if (mode === 'orbit') look = TARGET.clone();
+    else look = camera.position.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), 30);
+    return { pos: camera.position.clone(), look, fov: camera.fov, shift: lensShift };
+  }
+  function applyState(s) {
+    camera.position.copy(s.pos);
+    camera.fov = s.fov;
+    lensShift = s.shift;
+    camera.updateProjectionMatrix();
+    lookNow.copy(s.look);
+    camera.lookAt(lookNow);
+    loop.invalidate();
+  }
+  function finishMode(m, s) {
+    setMode(m);
+    const dir = s.look.clone().sub(s.pos).normalize();
+    controls.target.copy(m === 'orbit' ? TARGET : s.pos.clone().addScaledVector(dir, LOOK_PIVOT));
+    controls.enabled = true;
+    camera.lookAt(controls.target);
+  }
+
+  // Positions move around the lander's vertical axis (angle, radius, height), so a
+  // camera crossing to another side swings round the lander instead of through it.
+  const cyl = (v) => ({ a: Math.atan2(v.z, v.x), r: Math.hypot(v.x, v.z), y: v.y });
+  /** Tween to a camera state and land in the given mode. */
+  function animateTo(end, endMode, dur) {
+    const from = camState();
+    if (reduceMotion || !dur) {
+      camAnim = null;
+      syncHold();
+      applyState(end);
+      finishMode(endMode, end);
+      return;
+    }
+    const c0 = cyl(from.pos), c1 = cyl(end.pos);
+    const da = ((c1.a - c0.a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+    camAnim = { t0: performance.now(), dur, from, end, c0, c1, da, endMode };
+    controls.enabled = false; // no orbit limits pulling at the camera mid-flight
+    syncHold();
+  }
+  function stepCamAnim(now) {
+    const { t0, dur, from, end, c0, c1, da, endMode } = camAnim;
+    const t = Math.min((now - t0) / dur, 1);
+    const k = easeInOut(t);
+    const a = c0.a + da * k, r = c0.r + (c1.r - c0.r) * k;
+    applyState({
+      pos: tmpPos.set(Math.cos(a) * r, c0.y + (c1.y - c0.y) * k, Math.sin(a) * r),
+      look: from.look.clone().lerp(end.look, k),
+      fov: from.fov + (end.fov - from.fov) * k,
+      shift: from.shift + (end.shift - from.shift) * k,
+    });
+    if (t >= 1) {
+      camAnim = null;
+      syncHold();
+      finishMode(endMode, end);
+    }
+  }
+
+  function zoomBy(factor) {
+    if (camAnim) {
+      // Land the framing move first, then zoom from where it ends.
+      const { end, endMode } = camAnim;
+      camAnim = null;
+      applyState(end);
+      finishMode(endMode, end);
+      syncHold();
+    }
+    if (mode === 'overhead') {
+      // Standing beside the lander: zoom narrows or widens the lens instead.
+      const s = camState();
+      animateTo({ ...s, fov: THREE.MathUtils.clamp(camera.fov * factor, 35, 100) }, 'overhead', 220);
+      return;
+    }
+    const base = zoomGoal ?? currentPose().dist;
+    zoomGoal = THREE.MathUtils.clamp(base * factor, DIST.min, DIST.max);
+    syncHold();
+  }
+  function stepZoom() {
+    const pose = currentPose();
+    const d = pose.dist + (zoomGoal - pose.dist) * 0.2;
+    const done = Math.abs(zoomGoal - d) < 0.01;
+    const off = camera.position.clone().sub(TARGET).setLength(done ? zoomGoal : d);
+    camera.position.copy(TARGET).add(off);
+    if (done) {
+      zoomGoal = null;
+      syncHold();
+      // A closer lander needs a different lens to stay whole; keep the heading.
+      if (lastSample) fitView(lastSample, { animate: true, keepPose: true, dur: 380 });
+    }
+  }
+
+  // Ctrl/⌘ + wheel zooms (plain wheel scrolls the page). Gentle and proportional.
+  renderer.domElement.addEventListener(
+    'wheel',
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      zoomBy(THREE.MathUtils.clamp(Math.exp(px * 0.0015), 0.94, 1.06));
+    },
+    { passive: false },
+  );
+
+  const loop = renderLoop(container, (now) => {
+    if (camAnim) stepCamAnim(now);
+    if (zoomGoal !== null) stepZoom();
+    if (!camAnim && controls.enabled && controls.update()) loop.invalidate();
+    if (clampToGround()) loop.invalidate();
+    camera.updateMatrixWorld();
+    labelSides();
     renderer.render(scene, camera);
     labels.render(scene, camera);
+    placeEdgeTags();
+    dome.draw(currentView());
   });
   controls.addEventListener('change', () => loop.invalidate());
+  // Once someone drags, leave the view where they put it until the plan changes.
+  controls.addEventListener('start', () => {
+    auto = false;
+  });
 
   function resize() {
     const w = container.clientWidth, h = container.clientHeight;
@@ -280,24 +586,121 @@ export function createSurface(container) {
     renderer.domElement.style.height = `${h}px`;
     labels.setSize(w, h);
     camera.aspect = w / h;
-    camera.fov = w / h < 1 ? 62 : 50;
     camera.updateProjectionMatrix();
+    // A new panel shape changes what fits.
+    if (lastSample && (auto || mode === 'orbit')) fitView(lastSample, { animate: false, keepPose: !auto });
     loop.invalidate();
   }
-  new ResizeObserver(resize).observe(container);
 
-  /** Point the camera across the lander toward an azimuth, pitched to fit the highest body. */
-  function frame(azDeg, topElDeg = 5) {
-    const look = azElToLocal(azDeg, 0);
-    const dist = container.clientWidth < 520 ? 21 : 17;
-    const halfV = camera.fov / 2;
-    const pitch = THREE.MathUtils.clamp(topElDeg + 7 - halfV, 4, 30);
-    controls.target.set(0, 2.6 + dist * Math.tan(THREE.MathUtils.degToRad(pitch)), 0);
-    camera.position.set(0, 0, 0).addScaledVector(look, -dist).setY(2.6);
-    // Nudge sideways so the lander doesn't sit dead-centre over the bodies.
-    camera.position.addScaledVector(new THREE.Vector3(-look.z, 0, look.x), dist * 0.34);
-    controls.update();
-    loop.invalidate();
+  // ───────────── Framing ─────────────
+  let auto = true; // the camera follows the sky until the user drags
+  let fitted = { kept: new Set(), dropped: new Set() };
+  let lastSample = null;
+  const OVERHEAD_FROM = 40; // a body this high (°) that will not frame with the lander → overhead shot
+  const OVERHEAD_UNTIL = 45; // back to the lander framing once every body is below this
+
+  /**
+   * Frame the lander with whichever of the Sun and Earth are up; if a high body
+   * cannot be framed that way, switch to the overhead shot. Below-horizon bodies
+   * are framed only when nothing is up, so the view faces their ghost tags.
+   * keepPose: orbit only; keep the heading and elevation, fit only the lens.
+   * overhead: false keeps the camera in orbit even for a high sky.
+   */
+  function fitView(sample, { animate, focus = null, keepPose = false, dur = 1000, dist: distOverride = null, overhead = true }) {
+    const w = container.clientWidth, h = container.clientHeight;
+    if (!w || !h) return null;
+    const up = ['sun', 'earth'].filter((b) => sample[b].el > 0);
+    const names = up.length ? up : ['earth', 'sun'];
+    const bodies = names.map((b) => ({
+      name: b,
+      az: sample[b].az,
+      el: up.length ? sample[b].el : 0.6,
+      // If both cannot fit: keep the one asked for, else Earth (it barely moves).
+      priority: b === focus ? 3 : b === 'earth' ? 2 : 1,
+    }));
+    const byPriority = [...bodies].sort((a, b) => b.priority - a.priority);
+    // Keep bodies low enough that their label (≈50 px above the disk) clears the
+    // HUD and the sky dome. On wide panels those cover only the sides, so count half.
+    const dr = domeRect();
+    const topUi = w < 520 ? hudBottom() : Math.max(hudBottom(), dr && dr.t < h / 2 ? dr.b : 0) * 0.5;
+    const topReserve = Math.min(0.42, (50 + topUi) / h);
+    const aspect = w / h;
+    const orbitPose = mode === 'orbit' && !camAnim ? currentPose() : { dist: homeDist() };
+    const dist = THREE.MathUtils.clamp(distOverride ?? zoomGoal ?? orbitPose.dist, DIST.min, DIST.max);
+    keepPose = keepPose && mode === 'orbit' && !camAnim;
+    const fit = fitSurfaceCamera({
+      bodies, aspect, dist, skyR: SKY_R, topReserve,
+      pose: keepPose ? { yaw: orbitPose.yaw, elev: THREE.MathUtils.clamp(orbitPose.elev, -4, 40) } : null,
+    });
+    if (!keepPose) auto = true;
+
+    // Too high to frame with the whole lander: the overhead shot.
+    const highUnframed = up.some((b) => sample[b].el >= OVERHEAD_FROM && !byPriority.slice(0, fit.kept).some((x) => x.name === b));
+    if (overhead && !keepPose && highUnframed) {
+      const ov = fitOverhead({ bodies: bodies.filter((b) => up.includes(b.name)), aspect, skyR: SKY_R, topReserve });
+      if (ov && ov.kept >= fit.kept) {
+        const kept = byPriority.filter((b) => up.includes(b.name)).slice(0, ov.kept).map((b) => b.name);
+        fitted = { kept: new Set(kept), dropped: new Set(up.filter((b) => !kept.includes(b))) };
+        const pos = new THREE.Vector3().fromArray(ov.pos);
+        pos.y = Math.max(pos.y, groundHeight(pos.x, pos.z) + EYE_CLEARANCE);
+        const look = pos.clone().addScaledVector(new THREE.Vector3().fromArray(ov.f), 30);
+        animateTo({ pos, look, fov: ov.fov, shift: 0 }, 'overhead', animate ? dur : 0);
+        return fit;
+      }
+    }
+
+    const kept = byPriority.slice(0, fit.kept).map((b) => b.name);
+    fitted = { kept: new Set(kept), dropped: new Set(up.filter((b) => !kept.includes(b))) };
+    const pos = keepPose ? camera.position.clone() : new THREE.Vector3().fromArray(poseBasis({ yaw: fit.yaw, elev: fit.elev, dist }).pos);
+    animateTo({ pos, look: TARGET.clone(), fov: fit.fov, shift: fit.shift }, 'orbit', animate ? dur : 0);
+    return fit;
+  }
+
+  /** Bring an off-screen body into view: with the whole lander if it fits, else the overhead shot. */
+  function focusBody(body) {
+    if (lastSample) fitView(lastSample, { animate: true, focus: body });
+  }
+  /** From the overhead shot back to circling the lander (the high body may leave the frame). */
+  function backToLander() {
+    if (!lastSample) return;
+    fitView(lastSample, { animate: true, overhead: false, dist: homeDist(), dur: 900 });
+    auto = false; // stay with the lander during playback until recentred
+  }
+  function recentre() {
+    zoomGoal = null;
+    syncHold();
+    // Back to the automatic framing at the home zoom.
+    if (lastSample) fitView(lastSample, { animate: true, dist: homeDist(), dur: 900 });
+  }
+
+  /** While following the sky, re-frame when a framed body drifts off, a new one rises, or the sky comes down. */
+  function needsRefit(sample) {
+    if (!auto || camAnim || zoomGoal !== null) return false;
+    const up = ['sun', 'earth'].filter((b) => sample[b].el > 0);
+    if (mode === 'overhead' && up.every((b) => sample[b].el < OVERHEAD_UNTIL)) return true;
+    camera.updateMatrixWorld();
+    return up.some((b) => {
+      if (fitted.dropped.has(b)) return false;
+      if (!fitted.kept.has(b)) return true;
+      projected.copy(azElToLocal(sample[b].az, sample[b].el)).multiplyScalar(SKY_R).project(camera);
+      return projected.z > 1 || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1;
+    });
+  }
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /** What the camera covers, for the sky dome: heading, elevation band, half-width. */
+  function currentView() {
+    const dir = camera.getWorldDirection(new THREE.Vector3());
+    const heading = (THREE.MathUtils.radToDeg(Math.atan2(dir.x, -dir.z)) + 360) % 360;
+    const pitch = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1)));
+    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    return {
+      heading,
+      top: pitch + THREE.MathUtils.radToDeg(Math.atan(t * (1 + lensShift))),
+      bottom: pitch - THREE.MathUtils.radToDeg(Math.atan(t * (1 - lensShift))),
+      half: THREE.MathUtils.radToDeg(Math.atan(t * camera.aspect)),
+      sample: lastSample,
+    };
   }
 
   function placeBody(sample, body, mesh, halo, lbl) {
@@ -315,23 +718,64 @@ export function createSurface(container) {
       ? `<b>${name}</b> <span class="num">${fmtDeg(el)}</span>`
       : `<b>${name}</b> <span class="num">${fmtDeg(el)}</span><span class="lbl-sub">below horizon ↓</span>`;
     lbl.d.classList.toggle('is-below', !above);
-    lbl.o.position.copy(dirShown).multiplyScalar(SKY_R * 0.8).add(new THREE.Vector3(0, above ? 60 : 30, 0));
+    // Bodies in the sky: anchor on the body and lift the text by a fixed pixel
+    // gap (CSS), so it clears the disk at any field of view.
+    if (!above) lbl.d.classList.remove('lbl-up', 'lbl-down');
+    if (above) lbl.o.position.copy(dirShown).multiplyScalar(SKY_R * 0.8);
+    else lbl.o.position.copy(dirShown).multiplyScalar(SKY_R * 0.8).add(new THREE.Vector3(0, 30, 0));
     return dirTrue;
   }
 
-  let lastSite = null;
+  let lastView = null;
+  let closeLower = null;
 
-  function update({ siteId, sample }) {
-    if (siteId !== lastSite) {
-      lastSite = siteId;
-      // Face whichever body is up, preferring Earth (it barely moves).
-      const pick = sample.earth.el > -2 || sample.sun.el < 0 ? sample.earth : sample.sun;
-      const topEl = Math.max(sample.sun.el > 0 ? sample.sun.el : 0, sample.earth.el > 0 ? sample.earth.el : 0);
-      frame(pick.az, topEl);
+  /**
+   * Labels sit above their body unless that would print them under the HUD,
+   * or the body is the lower of a close Sun–Earth pair; then they hang below.
+   */
+  const labelPt = new THREE.Vector3();
+  function labelSides() {
+    const h = container.clientHeight;
+    const downs = new Map();
+    for (const lbl of [sunLbl, earthLbl]) {
+      if (lbl.d.classList.contains('is-below')) continue;
+      labelPt.copy(lbl.o.position).project(camera);
+      const yPx = ((1 - labelPt.y) / 2) * h;
+      downs.set(lbl, lbl === closeLower || (labelPt.z < 1 && yPx < hudBottom() + 52));
+    }
+    // A close pair with both labels hanging below: stack the lower body's one row further down.
+    const stacked = closeLower && downs.get(sunLbl) && downs.get(earthLbl);
+    for (const [lbl, down] of downs) {
+      lbl.d.classList.toggle('lbl-down', down);
+      lbl.d.classList.toggle('lbl-up', !down);
+      lbl.d.classList.toggle('lbl-far', Boolean(stacked) && lbl === closeLower);
+    }
+  }
+
+  /**
+   * @param {{viewKey: string, sample: object}} p viewKey changes with the site,
+   *   touchdown, slip or scenario; each change re-frames the camera.
+   */
+  function update({ viewKey, sample }) {
+    lastSample = sample;
+    if (viewKey !== lastView) {
+      const first = lastView === null;
+      lastView = viewKey;
+      if (first) placeCamera({ yaw: 0, elev: FIT.homeElev, dist: homeDist() });
+      fitView(sample, { animate: !first });
+    } else if (needsRefit(sample)) {
+      fitView(sample, { animate: true });
     }
     const sDir = placeBody(sample, 'sun', sunSprite, null, sunLbl);
     const eDir = placeBody(sample, 'earth', earth, earthHalo, earthLbl);
     earthMat.uniforms.uSun.value.copy(sDir);
+    // Near-new Earth puts both bodies a few degrees apart; hang the lower body's
+    // label beneath it so the two labels don't print on top of each other.
+    closeLower = null;
+    if (sample.sun.el > 0 && sample.earth.el > 0 && sDir.angleTo(eDir) < THREE.MathUtils.degToRad(14)) {
+      closeLower = sample.sun.el < sample.earth.el ? sunLbl : earthLbl;
+    }
+    labelSides();
 
     // Sun: fade across its own disk (±0.27°) as it crosses the horizon.
     const sunUp = THREE.MathUtils.smoothstep(sample.sun.el, -SUN_RADIUS_DEG, SUN_RADIUS_DEG);
@@ -347,12 +791,89 @@ export function createSurface(container) {
     earthLight.intensity = 0.95 * k * earthUp * (1 - sunUp * 0.85);
     earthLight.position.copy(eDir).multiplyScalar(160);
     ambient.intensity = 0.16 + 0.2 * sunUp;
+    // Sunlit regolith throws light back up onto the lander's shadow side; the
+    // higher the Sun, the brighter the ground and the stronger that bounce.
+    const bounce = sunUp * Math.sin(THREE.MathUtils.degToRad(Math.max(sample.sun.el, 0)));
+    ambient.groundColor.setRGB(0.063 + 0.5 * bounce, 0.063 + 0.47 * bounce, 0.07 + 0.42 * bounce, THREE.SRGBColorSpace);
 
     // Aim the dish at Earth.
     dish.lookAt(dish.getWorldPosition(new THREE.Vector3()).add(eDir));
     loop.invalidate();
   }
 
+  new ResizeObserver(resize).observe(container);
   resize();
   return { update };
+}
+
+function svgIcon(d) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+}
+
+// ───────────── Sky dome mini-map ─────────────
+// The whole sky seen from the lander, flattened: zenith in the middle, horizon
+// at the rim, rotated so the way the camera faces is up. The wedge shows what
+// the main view covers.
+function createSkyDome(wrap) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = document.createElement('div');
+  el.className = 'sky-dome';
+  el.setAttribute('aria-hidden', 'true'); // the readout beside the view says the same in text
+  const R = 44, C = 50;
+  el.innerHTML = `<svg viewBox="0 0 100 100">
+      <circle class="sd-bg" cx="${C}" cy="${C}" r="${R}"/>
+      <circle class="sd-ring" cx="${C}" cy="${C}" r="${(R * 2) / 3}"/>
+      <circle class="sd-ring" cx="${C}" cy="${C}" r="${R / 3}"/>
+      <path class="sd-wedge"/>
+      <g class="sd-card"></g>
+      <g class="sd-bodies"></g>
+      <circle class="sd-zenith" cx="${C}" cy="${C}" r="1.1"/>
+    </svg><span class="sd-cap">Sky</span>`;
+  wrap.appendChild(el);
+  const wedge = el.querySelector('.sd-wedge');
+  const card = el.querySelector('.sd-card');
+  const bodiesG = el.querySelector('.sd-bodies');
+  const rho = (elev) => R * (1 - Math.min(Math.max(elev, 0), 90) / 90);
+  const pt = (rel, elev, r = rho(elev)) => {
+    const a = (rel * Math.PI) / 180;
+    return [C + r * Math.sin(a), C - r * Math.cos(a)];
+  };
+  let sig = '';
+
+  function draw(v) {
+    const s = v.sample;
+    if (!s) return;
+    const key = [v.heading, v.top, v.bottom, v.half, s.sun.az, s.sun.el, s.earth.az, s.earth.el].map((n) => n.toFixed(1)).join();
+    if (key === sig) return;
+    sig = key;
+    // View wedge between the bottom and top of the frame, ±half-width around the heading.
+    const top = Math.min(v.top, 90), bot = Math.max(v.bottom, 0);
+    const half = Math.min(v.half, 89);
+    if (top <= 0) wedge.setAttribute('d', '');
+    else {
+      const steps = 16, outer = [], inner = [];
+      for (let i = 0; i <= steps; i++) {
+        const rel = -half + (2 * half * i) / steps;
+        outer.push(pt(rel, bot));
+        inner.push(pt(rel, top));
+      }
+      const d = [...outer, ...inner.reverse()].map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ') + 'Z';
+      wedge.setAttribute('d', d);
+    }
+    card.innerHTML = [['N', 0], ['E', 90], ['S', 180], ['W', 270]]
+      .map(([n, az]) => {
+        const [x, y] = pt(az - v.heading, 0, R - 6.5);
+        return `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" class="${n === 'N' ? 'is-n' : ''}">${n}</text>`;
+      })
+      .join('');
+    bodiesG.innerHTML = ['earth', 'sun']
+      .map((b) => {
+        const { az, el: e } = s[b];
+        const below = e <= 0;
+        const [x, y] = pt(az - v.heading, 0, below ? R + 2.5 : rho(e));
+        return `<circle class="sd-${b} ${below ? 'is-below' : ''}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${b === 'sun' ? 4 : 3.6}"/>`;
+      })
+      .join('');
+  }
+  return { el, draw };
 }
