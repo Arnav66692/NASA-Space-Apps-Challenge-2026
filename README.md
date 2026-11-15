@@ -4,6 +4,8 @@
 
 > What changes in the first 72 hours on the Moon if touchdown slips nine days?
 
+**Live site:** https://long-shadow-moon.vercel.app (opens with no login)
+
 Long Shadow compares two hypothetical touchdowns at real landing sites, an original on **Mar 15, 2025 00:00 UTC** and a delayed one on **Mar 24, 2025 00:00 UTC**. For each it shows how many hours the Sun, Earth, and both are above a smooth reference horizon. Sun above means a geometric chance for solar power. Earth above means a geometric chance for direct-to-Earth radio. All geometry comes from NASA/JPL Horizons and ships with the site, so it needs no API key and no network calls.
 
 It opens on that nine-day question at two real sites. From there you can pick **any site, any touchdown from 2024 through 2030, and any slip from 1 to 30 days**. Seven more real landing sites are in the menu, and you can type your own latitude and longitude. The address bar updates as you go, so a link reopens the exact view.
@@ -22,6 +24,8 @@ npm run build      # static site in dist/
 npm run preview    # serve the production build locally
 npm run build:single  # one self-contained HTML in dist-single/ (double-click to open; shareable as a file)
 ```
+
+The live site is a Vercel project named `long-shadow-moon`. It is not connected to this repo, so a push to main does not update it. Redeploy by hand after a change with `vercel deploy --prod` from a checkout of main.
 
 `dist/` is a plain static site with relative paths. You can deploy it anywhere:
 
