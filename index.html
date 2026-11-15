@@ -143,10 +143,11 @@
             <fieldset class="plan" id="plan">
               <legend>Change the plan</legend>
               <div class="plan-row">
-                <label class="plan-f">
-                  <span class="plan-k">Original touchdown, UTC</span>
-                  <input type="datetime-local" id="start-input" step="3600" value="2025-03-15T00:00" disabled />
-                </label>
+                <div class="plan-f plan-date">
+                  <span class="plan-k" id="start-k">Original touchdown, UTC</span>
+                  <input type="datetime-local" id="start-input" step="3600" value="2025-03-15T00:00" disabled hidden tabindex="-1" aria-hidden="true" />
+                  <div class="dp" id="start-picker" data-labelledby="start-k"></div>
+                </div>
                 <label class="plan-f plan-slip">
                   <span class="plan-k">Schedule slip <output class="num" id="slip-out" for="slip-range">9 days</output></span>
                   <input type="range" id="slip-range" min="1" max="30" step="1" value="9" disabled />
@@ -171,8 +172,17 @@
                 <span class="slips-k" id="slips-k">Every slip, 0 to 30 days</span>
                 <span class="slips-legend" aria-hidden="true">
                   <span><i class="sl-sun"></i>Sun</span><span><i class="sl-earth"></i>Earth</span><span><i class="sl-both"></i>Both</span>
+                  <span><i class="sl-ok"></i>Meets your need</span>
                   <span>bar height is hours out of 72</span>
                 </span>
+              </div>
+              <div class="backup" id="backup">
+                <div class="backup-row">
+                  <span class="plan-k" id="need-k">Find a backup window · Sun and Earth up together, without a break, for at least</span>
+                  <div class="seg" role="radiogroup" aria-labelledby="need-k" id="need-picker"></div>
+                </div>
+                <p class="backup-read" id="backup-read" aria-live="polite">Loading the Moon table.</p>
+                <div class="backup-go" id="backup-go"></div>
               </div>
               <div class="slips-grid" data-slips-grid></div>
               <p class="slips-read" data-slips-read aria-live="polite">Loading the Moon table.</p>
@@ -195,6 +205,21 @@
                 </tr>
               </thead>
               <tbody id="metrics-body"></tbody>
+            </table>
+            <table class="stretches">
+              <caption>
+                <span class="cap-in">Longest stretch without a break
+                <span class="cap-note">30 hours in one piece is a different plan from 30 hours in short pieces.</span></span>
+              </caption>
+              <thead class="sr">
+                <tr>
+                  <th scope="col">Stretch</th>
+                  <th scope="col">Original</th>
+                  <th scope="col">Delayed</th>
+                  <th scope="col">Change</th>
+                </tr>
+              </thead>
+              <tbody id="stretch-body"></tbody>
             </table>
           </div>
         </div>

@@ -3,6 +3,7 @@ import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import './styles.css';
 import './unseen.css';
+import './additions.css';
 
 import { DATASETS, SITES, FEATURED, PRESET_START_MS, PRESET_SLIP_DAYS, customSite, scenarioLabel } from './data.js';
 import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, eclipseAt, HOUR_MS, HORIZON_MARGINS } from './calc.js';
@@ -17,8 +18,11 @@ import { icon } from './icons.js';
 import { WINDOW_HOURS } from './window.js';
 import { loadEphemeris } from './ephemeris.js';
 import { initChrome } from './chrome.js';
+import { createDatePicker } from './datepicker.js';
 import { eclipseIntervals } from './eclipse.js';
-import { analyzeStay, slipSeries, rankSlips, slipCell } from './slips.js';
+import {
+  analyzeStay, slipSeries, rankSlips, slipCell, findBackups, meetsNeed, firstRun, NEED_HOURS, DEFAULT_NEED_HOURS,
+} from './slips.js';
 
 const $ = (s) => document.querySelector(s);
 const MAX_MIN = WINDOW_HOURS * 60;
@@ -81,6 +85,7 @@ const state = {
   startMs: PRESET_START_MS,
   slipDays: PRESET_SLIP_DAYS,
   horizonDeg: 0,
+  needHours: DEFAULT_NEED_HOURS,
   scenario: 'original',
   elapsedMin: 0,
 };
@@ -173,6 +178,42 @@ function metricsHtml(p) {
     .join('');
 }
 
+/** Change text and colour class for a metric. `better` is +1 when more hours are good, −1 when fewer are. */
+function changeCell(c, better = 1) {
+  const cs = fmtHours(c);
+  const cls = cs === '0' ? 'zero' : c * better < 0 ? 'neg' : 'pos';
+  const text = cs === '0' ? 'No change' : `${c < 0 ? '−' : '+'}${cs.replace('-', '')} h`;
+  return `<td class="num m-change ${cls}"><span>${text}</span></td>`;
+}
+
+/** Continuous stretches: the longest unbroken time with both up, without sunlight and without Earth. */
+function stretchHtml(p, needHours) {
+  const o = p.original, d = p.delayed;
+  const rows = [
+    { k: 'both', label: 'Sun and Earth up together', key: 'longestBoth', better: 1 },
+    { k: 'sun', label: 'Without sunlight', key: 'longestDark', better: -1 },
+    { k: 'earth', label: 'Without Earth in the sky', key: 'longestNoEarth', better: -1 },
+  ];
+  const valueCell = (h) => `<td class="num"><span class="st-val">${fmtHours(h)}</span><span class="m-u">h</span></td>`;
+  const body = rows
+    .map((r) => {
+      const ov = o.stretches[r.key], dv = d.stretches[r.key];
+      return `<tr class="st-${r.k}"><th scope="row">${icon(r.k)}<span>${r.label}</span></th>${valueCell(ov)}${valueCell(dv)}${changeCell(dv - ov, r.better)}</tr>`;
+    })
+    .join('');
+  // When does the first stretch long enough for the need begin? Elapsed time from touchdown.
+  const firstCell = (a) => {
+    const run = firstRun({ bothRuns: a.both.intervals }, needHours);
+    return run
+      ? `<td class="num"><span class="st-at">${fmtElapsed(run[0] - a.start)}</span></td>`
+      : `<td class="num"><span class="st-none">None</span></td>`;
+  };
+  return (
+    body +
+    `<tr class="st-first"><th scope="row">${icon('both')}<span>First ${needHours} h with both up starts at</span></th>${firstCell(o)}${firstCell(d)}<td class="num m-change zero"><span></span></td></tr>`
+  );
+}
+
 // ───────────── Site picker, scenario switches ─────────────
 const siteMore = $('#site-more');
 const customForm = $('#custom-site');
@@ -252,6 +293,8 @@ function radioKeys(group, sel, pick) {
 
 // ───────────── Plan controls: touchdown date and slip ─────────────
 const startInput = $('#start-input');
+// The browser's own date-time pop-up cannot be styled, so a themed picker drives the hidden field.
+const datePicker = createDatePicker(startInput, $('#start-picker'), { slipDays: () => state.slipDays });
 const slipRange = $('#slip-range');
 const READY_MSG = 'Any site, any touchdown from 2024 through 2030, any slip up to 30 days.';
 
@@ -298,6 +341,26 @@ marginPicker.addEventListener('click', (e) => {
 });
 radioKeys(marginPicker, '[data-margin]', (b) => setState({ horizonDeg: Number(b.dataset.margin) }));
 
+// Backup finder: how many unbroken hours of Sun and Earth together the plan needs.
+const needPicker = $('#need-picker');
+needPicker.innerHTML = NEED_HOURS.map(
+  (h) => `<button type="button" role="radio" data-need="${h}" aria-checked="false"><span class="sp-name num">${h} h</span></button>`,
+).join('');
+needPicker.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-need]');
+  if (b) setState({ needHours: Number(b.dataset.need) });
+});
+radioKeys(needPicker, '[data-need]', (b) => setState({ needHours: Number(b.dataset.need) }));
+$('#backup-go').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-go]');
+  if (!b) return;
+  stopAnim();
+  const slipDays = Number(b.dataset.go);
+  const problem = planProblem(state.startMs, slipDays);
+  if (problem) return planMessage(problem, true);
+  setState({ slipDays, scenario: 'delayed', transition: true });
+});
+
 $('#plan-reset').addEventListener('click', () => {
   stopAnim();
   setState({ startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS });
@@ -316,7 +379,8 @@ $('#copy-link').addEventListener('click', async () => {
 function stateQuery() {
   const isDefault =
     state.site === 'athena' && state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS &&
-    state.horizonDeg === 0 && state.scenario === 'original' && Math.round(state.elapsedMin) === 0;
+    state.horizonDeg === 0 && state.needHours === DEFAULT_NEED_HOURS && state.scenario === 'original' &&
+    Math.round(state.elapsedMin) === 0;
   if (isDefault) return '';
   const q = new URLSearchParams();
   q.set('site', state.site);
@@ -327,6 +391,7 @@ function stateQuery() {
   q.set('start', toInputValue(state.startMs));
   q.set('slip', String(state.slipDays));
   if (state.horizonDeg > 0) q.set('h', String(state.horizonDeg));
+  if (state.needHours !== DEFAULT_NEED_HOURS) q.set('need', String(state.needHours));
   q.set('view', state.scenario);
   q.set('t', String(Math.round(state.elapsedMin)));
   return `?${q}`;
@@ -368,6 +433,8 @@ function patchFromUrl() {
   if (Number.isInteger(slip) && slip >= 1 && slip <= MAX_SLIP_DAYS) patch.slipDays = slip;
   const h = Number(q.get('h'));
   if (q.has('h') && HORIZON_MARGINS.includes(h)) patch.horizonDeg = h;
+  const need = Number(q.get('need'));
+  if (q.has('need') && NEED_HOURS.includes(need)) patch.needHours = need;
   if (['original', 'delayed'].includes(q.get('view'))) patch.scenario = q.get('view');
   const t = Number(q.get('t'));
   if (q.has('t') && Number.isFinite(t)) patch.elapsedMin = Math.min(Math.max(t, 0), MAX_MIN);
@@ -541,7 +608,68 @@ function renderSlips(p, site) {
     if (c.slipDays === 0) return slipCell(0, p.original);
     return c.slipDays === state.slipDays ? slipCell(c.slipDays, p.delayed) : c;
   });
+  slipCells = cells;
   slipStrip.render({ cells, rank: rankSlips(cells) });
+}
+
+/** The backup finder's answer and the strip marks, for the cells on screen and the chosen need. */
+let slipCells = null;
+function renderBackup() {
+  const read = $('#backup-read');
+  const go = $('#backup-go');
+  if (!slipCells) return;
+  const need = state.needHours;
+  const last = slipCells.at(-1).slipDays;
+  const b = findBackups(slipCells, need, state.slipDays);
+  slipStrip.markNeed({
+    ok: new Set(slipCells.filter((c) => meetsNeed(c, need)).map((c) => c.slipDays)),
+    pick: b.earliest?.slipDays ?? null,
+  });
+
+  const when = (c) => `<b>+${slipShort(c.slipDays)}</b> <span class="num">(${fmtDay(c.startMs)})</span>`;
+  const runWords = (c) => {
+    const r = firstRun(c, need);
+    const len = (r[1] - r[0]) / HOUR_MS;
+    return len >= WINDOW_HOURS - 1e-6
+      ? 'all 72 h'
+      : `${fmtHours(len)} h unbroken from <span class="num">${fmtElapsed(r[0] - c.startMs)}</span>`;
+  };
+  const planCell = slipCells.find((c) => c.slipDays === state.slipDays);
+  const planOk = planCell && meetsNeed(planCell, need);
+  const parts = [];
+  const offer = [];
+  if (!b.longest) {
+    parts.push(`No slip from 1 to ${last} days has the Sun and Earth up together here, so no backup meets a ${need} h need.`);
+  } else if (!b.earliest) {
+    parts.push(
+      `No slip from 1 to ${last} days gives ${need} h without a break. The longest unbroken stretch is ${fmtHours(b.longest.longestBothHours)} h, at ${when(b.longest)}.`,
+    );
+    offer.push(b.longest);
+  } else {
+    parts.push(`Earliest backup: ${when(b.earliest)}, ${runWords(b.earliest)}.`);
+    offer.push(b.earliest);
+    if (planOk && planCell !== b.earliest) {
+      parts.push(`The +${state.slipDays}-day slip in the plan also meets it: ${runWords(planCell)}.`);
+    } else if (!planOk && b.next && b.next !== b.earliest) {
+      parts.push(`After the +${state.slipDays}-day slip in the plan, the next is ${when(b.next)}, ${runWords(b.next)}.`);
+      offer.push(b.next);
+    } else if (!planOk && !b.next && state.slipDays < last) {
+      parts.push(`Nothing after the +${state.slipDays}-day slip in the plan meets it within ${last} days.`);
+    }
+    if (!offer.includes(b.longest) && b.longest !== planCell && b.longest.longestBothHours > b.earliest.longestBothHours + 0.05) {
+      parts.push(`Longest: ${when(b.longest)}, ${fmtHours(b.longest.longestBothHours)} h.`);
+      offer.push(b.longest);
+    }
+  }
+  read.innerHTML = parts.join(' ');
+  const showing = state.scenario === 'delayed' ? state.slipDays : null;
+  go.innerHTML = offer
+    .map((c) =>
+      c.slipDays === showing
+        ? `<span class="backup-on">Showing +${slipShort(c.slipDays)}</span>`
+        : `<button type="button" class="link-btn" data-go="${c.slipDays}">Show +${slipShort(c.slipDays)}</button>`,
+    )
+    .join('');
 }
 
 // ───────────── Touchdown buttons ─────────────
@@ -627,6 +755,7 @@ function announce(a, t, sample) {
 // ───────────── Central state update ─────────────
 let renderedKey = null;
 let renderedStripKey = null;
+let renderedNeedKey = null;
 function setState(patch) {
   const { transition, quiet, ...rest } = patch;
   const next = { ...state, ...rest };
@@ -668,6 +797,7 @@ function renderPlan(p, site) {
   document.querySelector('[data-scn-date="delayed"]').textContent = fmtDay(d.start);
 
   if (startInput.value !== toInputValue(state.startMs)) startInput.value = toInputValue(state.startMs);
+  datePicker.sync();
   if (Number(slipRange.value) !== state.slipDays) slipRange.value = String(state.slipDays);
   $('#slip-out').textContent = slipShort(state.slipDays);
   $('#plan-reset').hidden = state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS;
@@ -699,6 +829,17 @@ function render({ transition, quiet } = {}) {
     renderedStripKey = stripKey;
     strip.render(a);
   }
+  const needKey = `${p.key}/${state.needHours}/${state.scenario}/${slipCells?.length ?? 0}`;
+  if (renderedNeedKey !== needKey) {
+    renderedNeedKey = needKey;
+    $('#stretch-body').innerHTML = stretchHtml(p, state.needHours);
+    renderBackup();
+  }
+  needPicker.querySelectorAll('[data-need]').forEach((b) => {
+    const on = Number(b.dataset.need) === state.needHours;
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
 
   // Controls reflect state
   document.querySelectorAll('#site-picker [data-site]').forEach((b, i) => {
@@ -797,6 +938,7 @@ loadEphemeris()
     siteMore.disabled = false;
     startInput.min = toInputValue(eph.startMs);
     startInput.max = toInputValue(eph.endMs - (WINDOW_HOURS * HOUR_MS + DAY_MS));
+    datePicker.sync();
     planMessage(READY_MSG);
     // Pairs built before the table arrived have no eclipse check. Rebuild them and draw the slip strip.
     pairCache.clear();
@@ -817,6 +959,7 @@ loadEphemeris()
     console.error('Moon table unavailable', err);
     planMessage('Other sites and dates could not load. The four reference scenarios still work.', true);
     slipStrip.message('The slip strip needs the Moon table, which did not load.');
+    $('#backup-read').textContent = 'The backup finder needs the Moon table, which did not load.';
   });
 
 // Re-render the strip on resize (it's an SVG sized to its container).
