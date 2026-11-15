@@ -15,7 +15,7 @@
         var d = document.documentElement;
         var h = location.hash.slice(1);
         var q = location.search.replace(/^\?/, '').split('&').filter(function (p) { return p && p.indexOf('look=') !== 0; });
-        var tool = ['navigator', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && q.length > 0);
+        var tool = ['navigator', 'sites', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && q.length > 0);
         d.dataset.page = tool ? 'tool' : 'home';
         d.classList.add('js');
         if (!tool && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('intro-on', 'entering');
@@ -128,6 +128,7 @@
                 <span class="td-k">Original touchdown</span>
                 <span class="td-v num" id="td-original-date">Mar 15, 2025</span>
                 <span class="td-time num" id="td-original-time">00:00 UTC</span>
+                <span class="td-verdict" id="td-original-verdict" hidden></span>
               </button>
               <button class="apply" id="apply-delay" type="button">
                 <span class="apply-label">Apply +9 days</span>
@@ -137,6 +138,7 @@
                 <span class="td-k">Delayed touchdown</span>
                 <span class="td-v num" id="td-delayed-date">Mar 24, 2025</span>
                 <span class="td-time num" id="td-delayed-time">00:00 UTC</span>
+                <span class="td-verdict" id="td-delayed-verdict" hidden></span>
               </button>
             </div>
 
@@ -159,10 +161,18 @@
                   <p class="margin-help" id="margin-help">Treat the lowest few degrees of sky as blocked by ridges and crater rims. Every number below reruns.</p>
                 </div>
               </div>
+              <div class="plan-need">
+                <label class="plan-f plan-slip">
+                  <span class="plan-k">Mission needs, hours with Sun and Earth both up <output class="num" id="need-out" for="need-range">24 h</output></span>
+                  <input type="range" id="need-range" min="0" max="72" step="1" value="24" aria-describedby="need-help" />
+                </label>
+                <p class="margin-help" id="need-help">Power and a radio link at the same time. Set 0 to turn the verdict off.</p>
+              </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
                 <button type="button" class="link-btn" id="plan-reset" hidden>Reset to Mar 15, 2025 and 9 days</button>
                 <button type="button" class="link-btn" id="copy-link">Copy link to this view</button>
+                <button type="button" class="link-btn" id="download-csv">Download data (CSV)</button>
               </div>
             </fieldset>
 
@@ -215,6 +225,30 @@
       </section>
 
       <!-- ───────────── Instrument: timelines + sky ───────────── -->
+      <!-- ───────────── Every site on the same plan ───────────── -->
+      <section class="sites" id="sites" aria-labelledby="sites-h">
+        <header class="sec-head">
+          <h2 id="sites-h">Every site, same plan</h2>
+          <p class="sec-sub" id="sites-sub">The same touchdown and slip at every landing site, best delayed stay first. Pick a row to open that site.</p>
+        </header>
+        <div class="sites-wrap">
+          <table class="sites-table">
+            <caption class="sr">Hours above the horizon in the first 72 hours at every site, original and delayed touchdown</caption>
+            <thead>
+              <tr>
+                <th scope="col">Site</th>
+                <th scope="col" class="num col-sun">Sun</th>
+                <th scope="col" class="num col-earth">Earth</th>
+                <th scope="col" class="num">Both</th>
+                <th scope="col" class="num">Change</th>
+                <th scope="col">Verdict</th>
+              </tr>
+            </thead>
+            <tbody id="sites-body"><tr><td colspan="6" class="sites-wait">Loading the Moon table.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="instrument" id="instrument" aria-labelledby="inst-h">
         <header class="sec-head">
           <h2 id="inst-h">The first 72 hours, side by side</h2>
@@ -352,6 +386,8 @@
               The terrain margin raises the line that counts as the horizon to 1, 2 or 5 degrees, as a
               stand-in for ridges and crater rims. It is the same in every direction around the site, so it
               is a what-if, not a measured horizon.
+              The mission need is a single threshold on hours with the Sun and Earth both above the horizon.
+              A stay meets it when its hours are at least the need.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
             </p>
           </div>

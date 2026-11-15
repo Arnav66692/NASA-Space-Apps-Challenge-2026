@@ -3,6 +3,7 @@
 // Written with an AI tool (Claude).
 import { fmtHours, fmtDay, slipShort } from './format.js';
 import { icon } from './icons.js';
+import { verdict, slipsMeetingNeed } from './plan.js';
 
 const WINDOW_H = 72;
 const LABEL_EVERY = 5;
@@ -76,9 +77,10 @@ export function createSlipStrip(root, { onPick }) {
     showSummary();
   }
 
-  function render({ cells: nextCells, rank }) {
+  function render({ cells: nextCells, rank, needHours = 0 }) {
     cells = nextCells;
-    summary = summaryWords(cells, rank);
+    const met = slipsMeetingNeed(cells, needHours);
+    summary = summaryWords(cells, rank) + (met ? ` ${met.meet} of ${met.of} slips give at least ${needHours} h with both up.` : '');
     grid.innerHTML = cells
       .map((c) => {
         const mark = rank && c.slipDays === rank.best ? 'best' : rank && c.slipDays === rank.worst ? 'worst' : '';
@@ -87,7 +89,9 @@ export function createSlipStrip(root, { onPick }) {
           ? `<span class="slip-mark ${mark}" aria-hidden="true">${mark === 'best' ? '▲' : '▼'}</span>`
           : '';
         const markWords = mark === 'best' ? ' Most hours with both up.' : mark === 'worst' ? ' Fewest hours with both up.' : '';
-        return `<button type="button" class="slip-cell ${labelled} ${mark ? `is-${mark}` : ''}" data-slip="${c.slipDays}" aria-label="${cellWords(c)}.${markWords}">
+        const v = verdict(c.bothHours, needHours);
+        const needWords = v === 'go' ? ' Meets the mission need.' : v === 'nogo' ? ' Falls short of the mission need.' : '';
+        return `<button type="button" class="slip-cell ${labelled} ${mark ? `is-${mark}` : ''} ${v === 'nogo' ? 'misses' : ''}" data-slip="${c.slipDays}" aria-label="${cellWords(c)}.${markWords}${needWords}">
           ${markHtml}
           <span class="slip-bars" aria-hidden="true">
             <i class="sb sun" style="--h:${pctOf(c.sunHours)}"></i><i class="sb earth" style="--h:${pctOf(c.earthHours)}"></i><i class="sb both" style="--h:${pctOf(c.bothHours)}"></i>

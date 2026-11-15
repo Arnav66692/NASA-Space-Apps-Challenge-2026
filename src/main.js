@@ -19,6 +19,7 @@ import { loadEphemeris } from './ephemeris.js';
 import { initChrome } from './chrome.js';
 import { eclipseIntervals } from './eclipse.js';
 import { analyzeStay, slipSeries, rankSlips, slipCell } from './slips.js';
+import { NEED_DEFAULT_H, NEED_MAX_H, verdict, siteRows, planCsv } from './plan.js';
 
 const $ = (s) => document.querySelector(s);
 const MAX_MIN = WINDOW_HOURS * 60;
@@ -81,6 +82,7 @@ const state = {
   startMs: PRESET_START_MS,
   slipDays: PRESET_SLIP_DAYS,
   horizonDeg: 0,
+  needHours: NEED_DEFAULT_H,
   scenario: 'original',
   elapsedMin: 0,
 };
@@ -134,7 +136,7 @@ function answerHtml(p, site, slipDays) {
   }
   const earlier = `The original touchdown offers ${fmtHours(o.both.hours)} hours with both above the horizon.`;
   const where = site.id === 'custom' ? 'this custom site' : site.name;
-  const blocked = o.horizonDeg > 0 ? `, with the lowest ${o.horizonDeg}° of sky blocked by terrain,` : '';
+  const blocked = o.horizonDeg > 0 ? `, with the lowest ${o.horizonDeg}° of sky blocked by terrain,` : ',';
   const eclipse = [['original', o], ['delayed', d]]
     .filter(([, a]) => a.eclipse.any.length)
     .map(([name, a]) =>
@@ -143,7 +145,18 @@ function answerHtml(p, site, slipDays) {
         : ` In the ${name} stay Earth partly covers the Sun for a while.`,
     )
     .join('');
-  return `<strong>At ${where}${blocked} a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}${eclipse}`;
+  const need = state.needHours;
+  const vo = verdict(o.both.hours, need), vd = verdict(d.both.hours, need);
+  const verdictLine = !need
+    ? ''
+    : vo === 'go' && vd === 'nogo'
+      ? ` <strong class="v-line">Against a need of ${need} h with both up, the slip turns a go into a no go.</strong>`
+      : vo === 'nogo' && vd === 'go'
+        ? ` <strong class="v-line">Against a need of ${need} h with both up, the slip turns a no go into a go.</strong>`
+        : vo === 'go'
+          ? ` <strong class="v-line">Both touchdowns meet a need of ${need} h with both up.</strong>`
+          : ` <strong class="v-line">Neither touchdown meets a need of ${need} h with both up.</strong>`;
+  return `<strong>At ${where}${blocked} a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}${eclipse}${verdictLine}`;
 }
 
 function metricsHtml(p) {
@@ -298,6 +311,80 @@ marginPicker.addEventListener('click', (e) => {
 });
 radioKeys(marginPicker, '[data-margin]', (b) => setState({ horizonDeg: Number(b.dataset.margin) }));
 
+// Mission need: hours with the Sun and Earth both up. 0 turns the verdict off.
+const needRange = $('#need-range');
+needRange.addEventListener('input', () => {
+  stopAnim();
+  setState({ needHours: Number(needRange.value) });
+});
+
+// ───────────── Every site on the same plan ─────────────
+let lastSiteRows = [];
+const fmtPair = ([a, b]) => `<span class="num">${fmtHours(a)}</span><span class="sites-to" aria-hidden="true">→</span><span class="num">${fmtHours(b)}</span>`;
+function renderSites(o, d) {
+  const body = $('#sites-body');
+  $('#sites-sub').textContent =
+    `Touchdown ${fmtUtc(o.start, { year: true })} and the same slip of ${slipShort(state.slipDays)} at every landing site${
+      state.horizonDeg > 0 ? `, with a ${state.horizonDeg}° terrain margin` : ''
+    }. Original → delayed, best delayed stay first. Pick a row to open that site.`;
+  if (!eph) {
+    body.innerHTML = '<tr><td colspan="6" class="sites-wait">Loading the Moon table.</td></tr>';
+    return;
+  }
+  const list = [...Object.values(SITES), ...(state.site === 'custom' && state.custom ? [state.custom] : [])];
+  const entries = list
+    .map((site) => ({ site, pair: pairFor(site, state.startMs, state.slipDays, state.horizonDeg) }))
+    .filter((e) => e.pair);
+  lastSiteRows = siteRows(entries, state.needHours);
+  body.innerHTML = lastSiteRows
+    .map((r) => {
+      const change = fmtHours(r.change);
+      const changeCls = change === '0' ? 'zero' : r.change < 0 ? 'neg' : 'pos';
+      const v = r.verdict[1];
+      const verdictCell = v ? `<span class="verdict ${v}">${v === 'go' ? 'Go' : 'No go'}</span>` : '<span class="muted">No need set</span>';
+      return `<tr class="${r.id === state.site ? 'is-current' : ''}">
+        <th scope="row"><button type="button" class="sites-pick" data-pick-site="${r.id}">${r.name}<span class="sites-region">${r.region}</span></button></th>
+        <td class="num col-sun">${fmtPair(r.sun)}</td>
+        <td class="num col-earth">${fmtPair(r.earth)}</td>
+        <td class="num">${fmtPair(r.both)}</td>
+        <td class="num m-change ${changeCls}"><span>${change === '0' ? '0' : `${r.change < 0 ? '−' : '+'}${change.replace('-', '')}`}</span></td>
+        <td>${verdictCell}</td>
+      </tr>`;
+    })
+    .join('');
+}
+$('#sites-body').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pick-site]');
+  if (!b) return;
+  stopAnim();
+  setState({ site: b.dataset.pickSite, transition: true });
+  document.getElementById('navigator').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+});
+
+// ───────────── Download the plan as CSV ─────────────
+$('#download-csv').addEventListener('click', () => {
+  const site = currentSite();
+  const csv = planCsv({
+    site: site.id === 'custom' ? 'Custom site' : site.name,
+    coords: site.coordLabel,
+    touchdownUtc: new Date(state.startMs).toISOString().slice(0, 16).replace('T', ' '),
+    slipDays: state.slipDays,
+    marginDeg: state.horizonDeg,
+    needHours: state.needHours,
+    slips: lastSlipCells.map((c) => ({ ...c, touchdownUtc: new Date(c.startMs).toISOString().slice(0, 16).replace('T', ' ') })),
+    sites: lastSiteRows,
+  });
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `long-shadow-${site.id}-${toInputValue(state.startMs).slice(0, 10)}-slip-${state.slipDays}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  planMessage(eph ? 'Downloaded every slip and every site for this plan.' : 'Downloaded. The site list fills in once the Moon table loads.');
+});
+
 $('#plan-reset').addEventListener('click', () => {
   stopAnim();
   setState({ startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS });
@@ -316,7 +403,7 @@ $('#copy-link').addEventListener('click', async () => {
 function stateQuery() {
   const isDefault =
     state.site === 'athena' && state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS &&
-    state.horizonDeg === 0 && state.scenario === 'original' && Math.round(state.elapsedMin) === 0;
+    state.horizonDeg === 0 && state.needHours === NEED_DEFAULT_H && state.scenario === 'original' && Math.round(state.elapsedMin) === 0;
   if (isDefault) return '';
   const q = new URLSearchParams();
   q.set('site', state.site);
@@ -327,6 +414,7 @@ function stateQuery() {
   q.set('start', toInputValue(state.startMs));
   q.set('slip', String(state.slipDays));
   if (state.horizonDeg > 0) q.set('h', String(state.horizonDeg));
+  if (state.needHours !== NEED_DEFAULT_H) q.set('need', String(state.needHours));
   q.set('view', state.scenario);
   q.set('t', String(Math.round(state.elapsedMin)));
   return `?${q}`;
@@ -368,6 +456,8 @@ function patchFromUrl() {
   if (Number.isInteger(slip) && slip >= 1 && slip <= MAX_SLIP_DAYS) patch.slipDays = slip;
   const h = Number(q.get('h'));
   if (q.has('h') && HORIZON_MARGINS.includes(h)) patch.horizonDeg = h;
+  const need = Number(q.get('need'));
+  if (q.has('need') && Number.isInteger(need) && need >= 0 && need <= NEED_MAX_H) patch.needHours = need;
   if (['original', 'delayed'].includes(q.get('view'))) patch.scenario = q.get('view');
   const t = Number(q.get('t'));
   if (q.has('t') && Number.isFinite(t)) patch.elapsedMin = Math.min(Math.max(t, 0), MAX_MIN);
@@ -519,6 +609,7 @@ $('#eclipse-btn').addEventListener('click', replayEclipse);
 
 // ───────────── Slip strip ─────────────
 const seriesCache = new Map();
+let lastSlipCells = [];
 const slipStrip = createSlipStrip($('#slips'), {
   onPick: (slipDays) => {
     stopAnim();
@@ -541,7 +632,8 @@ function renderSlips(p, site) {
     if (c.slipDays === 0) return slipCell(0, p.original);
     return c.slipDays === state.slipDays ? slipCell(c.slipDays, p.delayed) : c;
   });
-  slipStrip.render({ cells, rank: rankSlips(cells) });
+  lastSlipCells = cells;
+  slipStrip.render({ cells, rank: rankSlips(cells), needHours: state.needHours });
 }
 
 // ───────────── Touchdown buttons ─────────────
@@ -653,6 +745,16 @@ function renderPlan(p, site) {
   $('#surf-site').textContent = `${site.name} · ${site.coordLabel}`;
   timelines.render([o, d]);
   renderSlips(p, site);
+  renderSites(o, d);
+  for (const [id, a] of [['original', o], ['delayed', d]]) {
+    const v = verdict(a.both.hours, state.needHours);
+    const chip = $(`#td-${id}-verdict`);
+    chip.hidden = !v;
+    chip.className = `td-verdict ${v ?? ''}`;
+    chip.textContent = v === 'go' ? 'Go' : 'No go';
+  }
+  $('#need-out').textContent = state.needHours > 0 ? `${state.needHours} h` : 'off';
+  if (Number(needRange.value) !== state.needHours) needRange.value = String(state.needHours);
   document.querySelectorAll('.model-tag').forEach((tag) => {
     tag.textContent = state.horizonDeg > 0 ? `Terrain margin ${state.horizonDeg}°` : 'Smooth-horizon estimate';
   });
@@ -689,8 +791,9 @@ function render({ transition, quiet } = {}) {
   document.body.dataset.scenario = state.scenario;
   document.body.dataset.site = state.site;
 
-  if (renderedKey !== p.key) {
-    renderedKey = p.key;
+  const planKey = `${p.key}|${state.needHours}`;
+  if (renderedKey !== planKey) {
+    renderedKey = planKey;
     renderPlan(p, site);
     renderedStripKey = null;
   }

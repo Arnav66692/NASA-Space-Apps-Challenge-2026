@@ -3,14 +3,14 @@
 // The behaviour follows unseen.co, measured for Arnav's portfolio build. The code is original.
 // Written with an AI tool (Claude).
 
-const TOOL_ANCHORS = ['navigator', 'instrument', 'replay', 'methods'];
+const TOOL_ANCHORS = ['navigator', 'sites', 'instrument', 'replay', 'methods'];
 const LEAVE_MS = 480;
 const MENU_MS = 1000;
 const INTRO_MIN_MS = 1500;
 const INTRO_MAX_MS = 6000;
 const INTRO_OUT_MS = 800;
 const CLOCK_ON_AT = 0.72; // the clock appears once the timelines' top is this far up the window
-const REVEAL = '.hero-copy > .eyebrow, .hero-copy > h1, .hero-copy > .answer, .hero-copy > .controls, .hero-copy > .metrics, .globe-wrap, .sec-head, .tl-grid, .sky, .rp-copy, .rp-compare, .methods h2, .m-lede, .m-grid > div';
+const REVEAL = '.hero-copy > .eyebrow, .hero-copy > h1, .hero-copy > .answer, .hero-copy > .controls, .hero-copy > .metrics, .globe-wrap, .sec-head, .sites-wrap, .tl-grid, .sky, .rp-copy, .rp-compare, .methods h2, .m-lede, .m-grid > div';
 const HEADER_AWAY_AFTER = 120; // px scrolled before the header may hide
 const PARALLAX = 0.066; // px of headline drift per px of pointer travel, against the pointer
 const ARROW =

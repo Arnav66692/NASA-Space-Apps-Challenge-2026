@@ -674,3 +674,39 @@ select option:disabled { color: #8d8986; }
 .surface-wrap > .look-switch { position: absolute; z-index: 3; right: 12px; bottom: 132px; background: rgb(20 20 20 / 0.85); }
 .no-3d .look-switch { display: none; }
 @media (max-width: 640px) { .surface-wrap > .look-switch { bottom: 16px; right: auto; left: 50%; transform: translateX(-50%); } }
+
+/* ───────────── Mission need and verdict ───────────── */
+.plan-need { margin-top: 1.4rem; display: grid; gap: 0.5rem; }
+.td { position: relative; }
+.td-verdict { justify-self: start; margin-top: 0.55rem; padding: 0.24rem 0.6rem; border-radius: 180px; font-size: 0.68rem; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; }
+.td-verdict[hidden] { display: none; }
+.td-verdict.go, .verdict.go { background: rgb(143 227 176 / 0.14); color: #8fe3b0; box-shadow: inset 0 0 0 1px rgb(143 227 176 / 0.45); }
+.td-verdict.nogo, .verdict.nogo { background: rgb(255 157 138 / 0.12); color: #ff9d8a; box-shadow: inset 0 0 0 1px rgb(255 157 138 / 0.45); }
+.answer .v-line { display: block; margin-top: 0.7rem; color: var(--night-ink); }
+.slip-cell.misses .slip-bars { opacity: 0.32; }
+.slip-cell.misses.is-shown .slip-bars, .slip-cell.misses.is-slip .slip-bars { opacity: 0.6; }
+
+/* ───────────── Every site, same plan ───────────── */
+.sites { padding-top: 6.5rem; padding-bottom: 2rem; border-top: 1px solid var(--night-line); }
+.sites-wrap { overflow-x: auto; }
+.sites-table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+.sites-table thead th { font-size: 0.7rem; font-weight: 400; letter-spacing: 0.02em; text-transform: uppercase; color: var(--night-2); text-align: left; padding: 0 0 0.8rem; }
+.sites-table thead th.num { text-align: right; }
+.sites-table th, .sites-table td { border-top: 1px solid var(--night-line); padding: 0.95rem 0.6rem 0.95rem 0; vertical-align: middle; }
+.sites-table td.num { text-align: right; white-space: nowrap; font-size: 1.15rem; letter-spacing: -0.02em; }
+.sites-table td:last-child, .sites-table thead th:last-child { padding-left: 1.4rem; }
+.sites-to { margin: 0 0.35rem; color: var(--night-2); font-size: 0.8rem; }
+.sites-pick { display: grid; gap: 0.15rem; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-size: 1.15rem; letter-spacing: -0.02em; color: var(--night-ink); }
+.sites-pick:hover { text-decoration: underline; text-underline-offset: 0.25em; }
+.sites-region { font-size: 0.72rem; letter-spacing: 0.02em; text-transform: uppercase; color: var(--night-2); }
+.sites-table tr.is-current .sites-pick { color: var(--sun-ink); }
+.sites-table tr.is-current th, .sites-table tr.is-current td { border-top-color: var(--night-ink); }
+.verdict { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 180px; font-size: 0.7rem; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.sites-wait { color: var(--night-2); }
+@media (max-width: 767px) {
+  .sites { padding-top: 4rem; }
+  .sites-table .col-sun, .sites-table .col-earth { display: none; }
+  .sites-table td.num { font-size: 1rem; }
+  .sites-pick { font-size: 1rem; }
+  .td-verdict { font-size: 0.6rem; }
+}
