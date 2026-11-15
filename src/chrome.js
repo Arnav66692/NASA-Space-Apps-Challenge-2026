@@ -9,6 +9,8 @@ const MENU_MS = 1000;
 const INTRO_MIN_MS = 1500;
 const INTRO_MAX_MS = 6000;
 const INTRO_OUT_MS = 800;
+const CLOCK_ON_AT = 0.72; // the clock appears once the timelines' top is this far up the window
+const REVEAL = '.hero-copy > .eyebrow, .hero-copy > h1, .hero-copy > .answer, .hero-copy > .controls, .hero-copy > .metrics, .globe-wrap, .sec-head, .tl-grid, .sky, .rp-copy, .rp-compare, .methods h2, .m-lede, .m-grid > div';
 const HEADER_AWAY_AFTER = 120; // px scrolled before the header may hide
 const PARALLAX = 0.066; // px of headline drift per px of pointer travel, against the pointer
 const ARROW =
@@ -104,6 +106,7 @@ export function initChrome() {
     root.classList.remove('header-away');
     setPage(page);
     scrollToAnchor(id, 'instant');
+    syncClock();
     root.classList.remove('leaving');
     root.classList.add('arriving');
     requestAnimationFrame(() =>
@@ -140,6 +143,33 @@ export function initChrome() {
     },
     { passive: true },
   );
+
+  // The mission clock shows only while the timelines are on screen.
+  const timelines = document.getElementById('timelines');
+  const syncClock = () => {
+    const on = root.dataset.page === 'tool' && timelines.getBoundingClientRect().top < window.innerHeight * CLOCK_ON_AT;
+    root.classList.toggle('clock-on', on);
+  };
+  window.addEventListener('scroll', syncClock, { passive: true });
+  window.addEventListener('resize', syncClock, { passive: true });
+
+  // Content rises in once, the first time it comes on screen.
+  if (!reduce && 'IntersectionObserver' in window) {
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add('is-revealed');
+          seen.unobserve(entry.target);
+        }
+      },
+      { rootMargin: '0px 0px -12% 0px' },
+    );
+    document.querySelectorAll(REVEAL).forEach((el) => {
+      el.classList.add('will-reveal');
+      seen.observe(el);
+    });
+  }
 
   // ───────────── Menu: a mask wipe from the right, items slide in, letters unfold ─────────────
   let open = false;
@@ -345,6 +375,7 @@ export function initChrome() {
   }
 
   markCurrent(root.dataset.page);
+  syncClock();
   runIntro();
 
   return {

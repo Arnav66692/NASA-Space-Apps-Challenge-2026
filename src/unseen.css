@@ -551,3 +551,30 @@ input[type="range"]::-webkit-slider-thumb { margin-top: -9px; border-color: var(
   .seg button { flex: 1; justify-content: center; }
   .intro__logo { font-size: 2.6rem; }
 }
+
+/* ───────────── Navigator head: centred like a case page, with the console under it ───────────── */
+@media (min-width: 1081px) {
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); column-gap: 5rem; row-gap: 0; padding-top: 11rem; }
+  .hero-copy { display: contents; }
+  .hero-copy > .eyebrow, .hero-copy > h1, .hero-copy > .answer { grid-column: 1 / -1; justify-self: center; text-align: center; }
+  .hero-copy > .eyebrow { margin-bottom: 1.8rem; }
+  .hero-copy > h1 { font-size: 5rem; line-height: 0.98; letter-spacing: -0.04em; max-width: 13.4em; margin-bottom: 2.4rem; }
+  .hero-copy > .answer { font-size: 1.55rem; line-height: 1.3; max-width: 31em; margin-bottom: 5.5rem; color: #d4cfcc; text-wrap: balance; }
+  .hero-copy > .controls { grid-column: 1; grid-row: 4; }
+  .hero-copy > .metrics { grid-column: 1; grid-row: 5; }
+  .globe-wrap { grid-column: 2; grid-row: 4 / span 2; align-self: start; top: 5.5rem; height: min(calc(100vh - 7rem), 48rem); }
+}
+
+/* The mission clock waits until the timelines are on screen, so it never sits on the section title. */
+.clock { transition: opacity 0.5s var(--expo-out), transform 0.6s var(--expo); }
+html.js:not(.clock-on) .clock { opacity: 0; transform: translateY(1.2rem); pointer-events: none; }
+
+/* Content rises in once as it comes on screen. */
+.will-reveal { opacity: 0; transform: translateY(2.2rem); transition: opacity 0.9s var(--expo-out), transform 0.9s var(--expo-out); }
+.will-reveal.is-revealed { opacity: 1; transform: none; }
+.hero-copy > h1.will-reveal { transition-delay: 0.08s; }
+.hero-copy > .answer.will-reveal { transition-delay: 0.16s; }
+.hero-copy > .controls.will-reveal, .globe-wrap.will-reveal { transition-delay: 0.26s; }
+.m-grid > .will-reveal:nth-child(2) { transition-delay: 0.08s; }
+.m-grid > .will-reveal:nth-child(3) { transition-delay: 0.16s; }
+html[data-page="home"] .globe-wrap.will-reveal { opacity: 1; transform: none; transition: none; }
