@@ -3,56 +3,133 @@ import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import './styles.css';
 
-import { DATASETS, SITES, SCENARIOS } from './data.js';
+import { DATASETS, SITES, FEATURED, PRESET_START_MS, PRESET_SLIP_DAYS, customSite, scenarioLabel } from './data.js';
 import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, HOUR_MS } from './calc.js';
-import { fmtHours, fmtUtc, fmtDuration, fmtElapsed, fmtDeg, fmtChange, compass, EVENT_NAME } from './format.js';
+import {
+  fmtHours, fmtUtc, fmtDuration, fmtElapsed, fmtDeg, fmtChange, fmtDay, fmtClock, slipWords, slipShort, compass,
+  EVENT_NAME,
+} from './format.js';
 import { createTimelines } from './timeline.js';
 import { createSkyStrip } from './skystrip.js';
 import { icon } from './icons.js';
+import { buildRows, WINDOW_HOURS } from './window.js';
+import { loadEphemeris } from './ephemeris.js';
 
 const $ = (s) => document.querySelector(s);
-const MAX_MIN = 72 * 60;
+const MAX_MIN = WINDOW_HOURS * 60;
+const DAY_MS = 24 * HOUR_MS;
+const MAX_SLIP_DAYS = 30;
+const MAX_CACHED_PAIRS = 64;
 
-// ───────────── Pre-compute all four presets ─────────────
-const A = {};
-for (const site of Object.keys(DATASETS)) {
-  A[site] = {};
-  for (const sc of Object.keys(DATASETS[site])) A[site][sc] = analyze(DATASETS[site][sc]);
+// ───────────── Scenario pairs: Horizons presets, or the bundled Moon table ─────────────
+// The four reference scenarios read the Horizons CSVs directly. Any other site,
+// touchdown or slip is computed from the Moon table once it has loaded.
+let eph = null;
+const pairCache = new Map();
+
+const isPreset = (site, startMs, slipDays) =>
+  Boolean(DATASETS[site.id]) && startMs === PRESET_START_MS && slipDays === PRESET_SLIP_DAYS;
+
+const pairKey = (site, startMs, slipDays) => `${site.id}|${site.lat}|${site.lonE}|${startMs}|${slipDays}`;
+
+/** Original and delayed analyses for a plan, or null while the table is still loading. */
+function pairFor(site, startMs, slipDays) {
+  const key = pairKey(site, startMs, slipDays);
+  if (pairCache.has(key)) return pairCache.get(key);
+  let pair;
+  if (isPreset(site, startMs, slipDays)) {
+    const ds = DATASETS[site.id];
+    pair = {
+      key,
+      source: 'horizons',
+      original: analyze({ ...ds.original, slipDays }),
+      delayed: analyze({ ...ds.delayed, slipDays }),
+    };
+  } else {
+    if (!eph) return null;
+    const build = (scenario, t0) =>
+      analyze({ site: site.id, scenario, file: null, slipDays, rows: buildRows(eph, site, t0) });
+    pair = {
+      key,
+      source: 'table',
+      original: build('original', startMs),
+      delayed: build('delayed', startMs + slipDays * DAY_MS),
+    };
+  }
+  if (pairCache.size >= MAX_CACHED_PAIRS) pairCache.clear();
+  pairCache.set(key, pair);
+  return pair;
 }
 
-const state = { site: 'athena', scenario: 'original', elapsedMin: 0 };
-const active = () => A[state.site][state.scenario];
+// The reference pairs, kept for the Blue Ghost replay and for QA in the console.
+const A = Object.fromEntries(
+  Object.keys(DATASETS).map((id) => [id, pairFor(SITES[id], PRESET_START_MS, PRESET_SLIP_DAYS)]),
+);
+
+const state = {
+  site: 'athena',
+  custom: null,
+  startMs: PRESET_START_MS,
+  slipDays: PRESET_SLIP_DAYS,
+  scenario: 'original',
+  elapsedMin: 0,
+};
+const siteIn = (s) => (s.site === 'custom' ? s.custom : SITES[s.site]);
+const currentSite = () => siteIn(state);
+const pair = () => pairFor(currentSite(), state.startMs, state.slipDays);
+const active = () => pair()[state.scenario];
 const selectedT = () => active().start + state.elapsedMin * 60_000;
 
-// ───────────── Answer + metrics ─────────────
-function answerHtml(siteId) {
-  const o = A[siteId].original;
-  const d = A[siteId].delayed;
-  const ch = delayImpact(o, d);
-  const name = SITES[siteId].name;
-  const parts = [];
-  if (d.bodies.sun.hours === 0 && o.bodies.sun.hours > 0) {
-    parts.push(`<span class="hl-sun">the Sun never rises</span> (${fmtHours(o.bodies.sun.hours)} → 0 h)`);
-  } else if (fmtHours(ch.sun) !== '0') parts.push(`<span class="hl-sun">${fmtChange(ch.sun)} of Sun</span>`);
-  if (fmtHours(ch.earth) !== '0') parts.push(`<span class="hl-earth">${fmtChange(ch.earth)} of Earth visibility</span>`);
-  else parts.push(`<span class="hl-earth">Earth stays up all 72 h</span>`);
-
-  let explain;
-  if (d.bodies.sun.hours === 0 && d.bodies.earth.hours > 0) {
-    explain =
-      d.bodies.earth.whole === 'above'
-        ? `After the delay, Earth is above the horizon for all 72 hours, all during modeled darkness.`
-        : `After the delay, Earth is above the horizon for ${fmtHours(d.bodies.earth.hours)} hours, all during modeled darkness.`;
-  } else {
-    explain = `After the delay, Earth is above the horizon for ${fmtHours(d.bodies.earth.hours)} hours.`;
+/** Why a plan cannot be shown, or null when it can. */
+function planProblem(startMs, slipDays) {
+  if (!Number.isFinite(startMs)) return 'Enter a touchdown date and time.';
+  if (!Number.isInteger(slipDays) || slipDays < 1 || slipDays > MAX_SLIP_DAYS) {
+    return `The slip must be 1 to ${MAX_SLIP_DAYS} days.`;
   }
-  const earlier = `The original touchdown offers ${fmtHours(o.both.hours)} hours with both above the horizon.`;
-  return `<strong>At ${name}, a nine-day slip means ${parts.join(' and ')}.</strong> ${explain} ${earlier}`;
+  if (!eph) return null;
+  const tail = slipDays * DAY_MS + WINDOW_HOURS * HOUR_MS;
+  if (startMs < eph.startMs || startMs + tail > eph.endMs) {
+    return `Pick a touchdown from ${fmtDay(eph.startMs, { year: true })} to ${fmtDay(eph.endMs - tail, { year: true })}.`;
+  }
+  return null;
 }
 
-function metricsHtml(siteId) {
-  const o = A[siteId].original;
-  const d = A[siteId].delayed;
+// ───────────── Answer + metrics ─────────────
+function answerHtml(p, site, slipDays) {
+  const o = p.original;
+  const d = p.delayed;
+  const ch = delayImpact(o, d);
+  const sunO = o.bodies.sun.hours, sunD = d.bodies.sun.hours;
+  const earthO = o.bodies.earth, earthD = d.bodies.earth;
+
+  let sunPart;
+  if (sunD === 0 && sunO > 0) sunPart = `<span class="hl-sun">the Sun never rises</span> (${fmtHours(sunO)} → 0 h)`;
+  else if (sunO === 0 && sunD > 0) sunPart = `<span class="hl-sun">the Sun comes up</span> (0 → ${fmtHours(sunD)} h)`;
+  else if (fmtHours(ch.sun) !== '0') sunPart = `<span class="hl-sun">${fmtChange(ch.sun)} of Sun</span>`;
+  else if (sunO === 0) sunPart = `<span class="hl-sun">the Sun stays down</span> in both stays`;
+  else sunPart = `<span class="hl-sun">the same ${fmtHours(sunO)} h of Sun</span>`;
+
+  let earthPart;
+  if (fmtHours(ch.earth) !== '0') earthPart = `<span class="hl-earth">${fmtChange(ch.earth)} of Earth visibility</span>`;
+  else if (earthO.whole === 'above' && earthD.whole === 'above') earthPart = `<span class="hl-earth">Earth stays up all 72 h</span>`;
+  else if (earthO.whole === 'below' && earthD.whole === 'below') earthPart = `<span class="hl-earth">Earth never rises here</span>`;
+  else earthPart = `<span class="hl-earth">the same ${fmtHours(earthO.hours)} h of Earth visibility</span>`;
+
+  let explain;
+  if (earthD.hours === 0) {
+    explain = `After the delay, Earth never clears the horizon, so there is no direct radio line in this model.`;
+  } else {
+    const span = earthD.whole === 'above' ? 'all 72 hours' : `${fmtHours(earthD.hours)} hours`;
+    explain = `After the delay, Earth is above the horizon for ${span}${sunD === 0 ? ', all during modeled darkness' : ''}.`;
+  }
+  const earlier = `The original touchdown offers ${fmtHours(o.both.hours)} hours with both above the horizon.`;
+  const where = site.id === 'custom' ? 'this custom site' : site.name;
+  return `<strong>At ${where}, a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}`;
+}
+
+function metricsHtml(p) {
+  const o = p.original;
+  const d = p.delayed;
   const ch = delayImpact(o, d);
   const rows = [
     { k: 'sun', label: 'Sun above horizon', note: 'solar power', o: o.bodies.sun.hours, d: d.bodies.sun.hours, c: ch.sun },
@@ -67,9 +144,9 @@ function metricsHtml(siteId) {
       return `<tr class="m-${r.k}">
         <th scope="row">${icon(r.k)}<span class="m-label">${r.label}<span class="m-note">${r.note}</span></span></th>
         <td class="num"><span class="m-val">${fmtHours(r.o)}</span><span class="m-u">h</span>
-          <span class="m-mini" aria-hidden="true"><i style="width:${(r.o / 72) * 100}%"></i></span></td>
+          <span class="m-mini" aria-hidden="true"><i style="width:${(r.o / WINDOW_HOURS) * 100}%"></i></span></td>
         <td class="num"><span class="m-val">${fmtHours(r.d)}</span><span class="m-u">h</span>
-          <span class="m-mini" aria-hidden="true"><i style="width:${(r.d / 72) * 100}%"></i></span></td>
+          <span class="m-mini" aria-hidden="true"><i style="width:${(r.d / WINDOW_HOURS) * 100}%"></i></span></td>
         <td class="num m-change ${cls}"><span>${changeText}</span><span class="sr">, ${fmtChange(r.c)}</span></td>
       </tr>`;
     })
@@ -77,12 +154,15 @@ function metricsHtml(siteId) {
 }
 
 // ───────────── Site picker, scenario switches ─────────────
+const siteMore = $('#site-more');
+const customForm = $('#custom-site');
+
 function buildSitePicker() {
   const el = $('#site-picker');
-  el.innerHTML = Object.values(SITES)
+  el.innerHTML = Object.values(FEATURED)
     .map(
       (s) => `<button type="button" role="radio" data-site="${s.id}" aria-checked="false">
-        <span class="sp-name">${s.name}</span><span class="sp-sub">${s.id === 'athena' ? 'South pole' : 'Mare Crisium'}</span>
+        <span class="sp-name">${s.name}</span><span class="sp-sub">${s.sub}</span>
       </button>`,
     )
     .join('');
@@ -91,14 +171,41 @@ function buildSitePicker() {
     if (b) setState({ site: b.dataset.site });
   });
   radioKeys(el, '[data-site]', (b) => setState({ site: b.dataset.site }));
+
+  const others = Object.values(SITES).filter((s) => !s.featured);
+  siteMore.innerHTML =
+    `<option value="">More sites</option>` +
+    others.map((s) => `<option value="${s.id}">${s.name} · ${s.region}</option>`).join('') +
+    `<option value="custom">Custom coordinates</option>`;
+  siteMore.addEventListener('change', () => {
+    const v = siteMore.value;
+    if (v === 'custom') {
+      customForm.hidden = false;
+      $('#custom-lat').focus();
+      return;
+    }
+    customForm.hidden = true;
+    if (v) setState({ site: v });
+  });
+  customForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const latText = $('#custom-lat').value.trim();
+    const lonText = $('#custom-lon').value.trim();
+    if (latText === '' || lonText === '') return planMessage('Enter both a latitude and a longitude.', true);
+    try {
+      setState({ site: 'custom', custom: customSite(Number(latText), Number(lonText)) });
+    } catch (err) {
+      planMessage(err instanceof Error ? err.message : 'Those coordinates are not valid.', true);
+    }
+  });
 }
 
 function buildScenarioSwitch() {
   const el = $('#scn-switch');
-  el.innerHTML = Object.values(SCENARIOS)
+  el.innerHTML = ['original', 'delayed']
     .map(
-      (s) => `<button type="button" role="radio" data-scenario="${s.id}" aria-checked="false">
-        <span>${s.id === 'original' ? 'Original' : 'Delayed'}</span><span class="num">${s.id === 'original' ? 'Mar 15' : 'Mar 24'}</span>
+      (id) => `<button type="button" role="radio" data-scenario="${id}" aria-checked="false">
+        <span>${id === 'original' ? 'Original' : 'Delayed'}</span><span class="num" data-scn-date="${id}"></span>
       </button>`,
     )
     .join('');
@@ -121,6 +228,114 @@ function radioKeys(group, sel, pick) {
     n.focus();
     pick(n);
   });
+}
+
+// ───────────── Plan controls: touchdown date and slip ─────────────
+const startInput = $('#start-input');
+const slipRange = $('#slip-range');
+const READY_MSG = 'Any site, any touchdown from 2024 through 2030, any slip up to 30 days.';
+
+function planMessage(text, isError = false) {
+  const el = $('#plan-msg');
+  el.textContent = text;
+  el.classList.toggle('is-error', isError);
+}
+const toInputValue = (ms) => new Date(ms).toISOString().slice(0, 16);
+
+startInput.addEventListener('change', () => {
+  // The field has no time zone. The value is read as UTC.
+  const ms = Date.parse(`${startInput.value}:00Z`);
+  const problem = planProblem(ms, state.slipDays);
+  if (problem) {
+    planMessage(problem, true);
+    startInput.value = toInputValue(state.startMs);
+    return;
+  }
+  stopAnim();
+  setState({ startMs: ms });
+});
+slipRange.addEventListener('input', () => {
+  const days = Number(slipRange.value);
+  const problem = planProblem(state.startMs, days);
+  if (problem) {
+    planMessage(problem, true);
+    slipRange.value = String(state.slipDays);
+    return;
+  }
+  stopAnim();
+  setState({ slipDays: days });
+});
+$('#plan-reset').addEventListener('click', () => {
+  stopAnim();
+  setState({ startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS });
+});
+$('#copy-link').addEventListener('click', async () => {
+  syncUrl();
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    planMessage('Link copied. It reopens this site, date, slip and time.');
+  } catch {
+    planMessage('Copy the address bar. It reopens this site, date, slip and time.');
+  }
+});
+
+// ───────────── Shareable address ─────────────
+function stateQuery() {
+  const isDefault =
+    state.site === 'athena' && state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS &&
+    state.scenario === 'original' && Math.round(state.elapsedMin) === 0;
+  if (isDefault) return '';
+  const q = new URLSearchParams();
+  q.set('site', state.site);
+  if (state.site === 'custom') {
+    q.set('lat', String(state.custom.lat));
+    q.set('lon', String(state.custom.lonE));
+  }
+  q.set('start', toInputValue(state.startMs));
+  q.set('slip', String(state.slipDays));
+  q.set('view', state.scenario);
+  q.set('t', String(Math.round(state.elapsedMin)));
+  return `?${q}`;
+}
+let urlTimer = null;
+function syncUrl() {
+  clearTimeout(urlTimer);
+  try {
+    window.history.replaceState(null, '', `${window.location.pathname}${stateQuery()}${window.location.hash}`);
+  } catch {
+    // Some embedded or file:// contexts refuse history changes. The app works without it.
+  }
+}
+const scheduleUrlSync = () => {
+  clearTimeout(urlTimer);
+  urlTimer = setTimeout(syncUrl, 400);
+};
+
+/** Read a shared address into a state patch. Unknown or invalid values are dropped. */
+function patchFromUrl() {
+  const q = new URLSearchParams(window.location.search);
+  if (![...q.keys()].length) return null;
+  const patch = {};
+  const siteId = q.get('site');
+  if (siteId === 'custom') {
+    try {
+      patch.custom = customSite(Number(q.get('lat')), Number(q.get('lon')));
+      patch.site = 'custom';
+    } catch {
+      // ignore bad coordinates
+    }
+  } else if (siteId && Object.hasOwn(SITES, siteId)) patch.site = siteId;
+  const start = q.get('start');
+  if (start && /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(start)) {
+    const ms = Date.parse(`${start}:00Z`);
+    if (Number.isFinite(ms)) patch.startMs = ms;
+  }
+  const slip = Number(q.get('slip'));
+  if (Number.isInteger(slip) && slip >= 1 && slip <= MAX_SLIP_DAYS) patch.slipDays = slip;
+  if (['original', 'delayed'].includes(q.get('view'))) patch.scenario = q.get('view');
+  const t = Number(q.get('t'));
+  if (q.has('t') && Number.isFinite(t)) patch.elapsedMin = Math.min(Math.max(t, 0), MAX_MIN);
+  return Object.keys(patch).length ? patch : null;
 }
 
 // ───────────── Scrubber ─────────────
@@ -180,7 +395,11 @@ $('#play').addEventListener('click', () => {
   $('#play').setAttribute('aria-label', 'Pause');
 });
 
-// ───────────── Blue Ghost replay ─────────────
+// ───────────── Blue Ghost replay (always the reference plan) ─────────────
+const REPLAY = { site: 'blueGhost', scenario: 'original', startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS };
+const onReplayPlan = () =>
+  state.site === 'blueGhost' && state.scenario === 'original' &&
+  state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS;
 const bgSunset = () => A.blueGhost.original.bodies.sun.events.find((e) => e.type === 'set');
 const sunsetMin = () => (bgSunset().t - A.blueGhost.original.start) / 60_000;
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -194,7 +413,7 @@ function showToast(html) {
 }
 
 function replay() {
-  setState({ site: 'blueGhost', scenario: 'original' });
+  setState({ ...REPLAY });
   document.querySelector('.sky').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
   const done = () => {
     setState({ elapsedMin: sunsetMin() });
@@ -209,11 +428,11 @@ function replay() {
 $('#replay-btn').addEventListener('click', replay);
 $('#step-sunset').addEventListener('click', () => {
   stopAnim();
-  setState({ site: 'blueGhost', scenario: 'original', elapsedMin: sunsetMin() });
+  setState({ ...REPLAY, elapsedMin: sunsetMin() });
 });
 const stepBy = (d) => {
   stopAnim();
-  if (state.site !== 'blueGhost' || state.scenario !== 'original') setState({ site: 'blueGhost', scenario: 'original', elapsedMin: sunsetMin() });
+  if (!onReplayPlan()) setState({ ...REPLAY, elapsedMin: sunsetMin() });
   setState({ elapsedMin: Math.min(Math.max(state.elapsedMin + d, 0), MAX_MIN) });
 };
 $('#step-back').addEventListener('click', () => stepBy(-60));
@@ -283,50 +502,90 @@ function announce(a, t, sample) {
   liveTimer = setTimeout(() => {
     const n = nextCrossing(a, t);
     $('#live').textContent =
-      `${SITES[state.site].name}, ${SCENARIOS[state.scenario].label}, ${fmtElapsed(t - a.start)}, ${fmtUtc(t, { year: true })}. ` +
+      `${currentSite().name}, ${scenarioLabel(state.scenario, state.slipDays)}, ${fmtElapsed(t - a.start)}, ${fmtUtc(t, { year: true })}. ` +
       `Sun ${fmtDeg(sample.sun.el)}, Earth ${fmtDeg(sample.earth.el)}. ` +
       (n ? `${EVENT_NAME[n.body][n.type]} in ${fmtDuration(n.t - t)}.` : 'No further crossing in this window.');
   }, 600);
 }
 
 // ───────────── Central state update ─────────────
-let renderedSite = null;
+let renderedKey = null;
 let renderedStripKey = null;
 function setState(patch) {
   const { transition, quiet, ...rest } = patch;
-  Object.assign(state, rest);
-  state.elapsedMin = Math.min(Math.max(state.elapsedMin, 0), MAX_MIN);
+  const next = { ...state, ...rest };
+  next.elapsedMin = Math.min(Math.max(next.elapsedMin, 0), MAX_MIN);
+  const site = siteIn(next);
+  if (!site || !pairFor(site, next.startMs, next.slipDays)) {
+    // Only reachable before the Moon table has loaded.
+    planMessage('Still loading the Moon table. Try again in a moment.', true);
+    return;
+  }
+  Object.assign(state, next);
   render({ transition, quiet });
 }
 
+/** Everything that depends on the plan (site, touchdown, slip) but not on the clock. */
+function renderPlan(p, site) {
+  const o = p.original, d = p.delayed;
+  $('#answer').innerHTML = answerHtml(p, site, state.slipDays);
+  $('#metrics-body').innerHTML = metricsHtml(p);
+  const source =
+    p.source === 'horizons' ? 'Direct JPL Horizons samples' : 'Computed from the bundled JPL Horizons table';
+  $('#site-meta').innerHTML =
+    `<span class="num">${site.coordLabel}</span> · ${site.region}<span class="site-src">${site.mission} · ${source}</span>`;
+  $('#surf-site').textContent = `${site.name} · ${site.coordLabel}`;
+  timelines.render([o, d]);
+
+  $('#slip-words').textContent = slipWords(state.slipDays);
+  $('#td-original-date').textContent = fmtDay(o.start, { year: true });
+  $('#td-original-time').textContent = fmtClock(o.start);
+  $('#td-delayed-date').textContent = fmtDay(d.start, { year: true });
+  $('#td-delayed-time').textContent = fmtClock(d.start);
+  $('#th-original').textContent = fmtDay(o.start);
+  $('#th-delayed').textContent = fmtDay(d.start);
+  document.querySelector('[data-scn-date="original"]').textContent = fmtDay(o.start);
+  document.querySelector('[data-scn-date="delayed"]').textContent = fmtDay(d.start);
+
+  if (startInput.value !== toInputValue(state.startMs)) startInput.value = toInputValue(state.startMs);
+  if (Number(slipRange.value) !== state.slipDays) slipRange.value = String(state.slipDays);
+  $('#slip-out').textContent = slipShort(state.slipDays);
+  $('#plan-reset').hidden = state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS;
+  siteMore.value = site.featured ? '' : state.site;
+  customForm.hidden = state.site !== 'custom';
+  if (state.site === 'custom') {
+    $('#custom-lat').value = String(site.lat);
+    $('#custom-lon').value = String(site.lonE);
+  }
+  if (eph) planMessage(READY_MSG);
+}
+
 function render({ transition, quiet } = {}) {
-  const site = SITES[state.site];
-  const a = active();
+  const site = currentSite();
+  const p = pair();
+  const a = p[state.scenario];
   const t = selectedT();
   const sample = sampleAt(a.rows, t);
   document.body.dataset.scenario = state.scenario;
   document.body.dataset.site = state.site;
 
-  if (renderedSite !== state.site) {
-    renderedSite = state.site;
-    $('#answer').innerHTML = answerHtml(state.site);
-    $('#metrics-body').innerHTML = metricsHtml(state.site);
-    $('#site-meta').innerHTML = `<span class="num">${site.coordLabel}</span> · ${site.region}`;
-    $('#surf-site').textContent = `${site.name} · ${site.coordLabel}`;
-    timelines.render([A[state.site].original, A[state.site].delayed]);
+  if (renderedKey !== p.key) {
+    renderedKey = p.key;
+    renderPlan(p, site);
     renderedStripKey = null;
   }
-  const stripKey = `${state.site}/${state.scenario}`;
+  const stripKey = `${p.key}/${state.scenario}`;
   if (renderedStripKey !== stripKey) {
     renderedStripKey = stripKey;
     strip.render(a);
   }
 
   // Controls reflect state
-  document.querySelectorAll('#site-picker [data-site]').forEach((b) => {
+  document.querySelectorAll('#site-picker [data-site]').forEach((b, i) => {
     const on = b.dataset.site === state.site;
     b.setAttribute('aria-checked', String(on));
-    b.tabIndex = on ? 0 : -1;
+    // Keep the group reachable by Tab when a non-featured site is active.
+    b.tabIndex = on || (!site.featured && i === 0) ? 0 : -1;
   });
   document.querySelectorAll('#scn-switch [data-scenario]').forEach((b) => {
     const on = b.dataset.scenario === state.scenario;
@@ -337,7 +596,7 @@ function render({ transition, quiet } = {}) {
   $('#td-delayed').setAttribute('aria-pressed', String(state.scenario === 'delayed'));
   const applied = state.scenario === 'delayed';
   $('#apply-delay').classList.toggle('is-applied', applied);
-  $('#apply-delay .apply-label').textContent = applied ? 'Back to original' : 'Apply +9 days';
+  $('#apply-delay .apply-label').textContent = applied ? 'Back to original' : `Apply +${slipShort(state.slipDays)}`;
 
   const elapsedMs = state.elapsedMin * 60_000;
   if (Number(scrubber.value) !== Math.round(state.elapsedMin)) scrubber.value = String(Math.round(state.elapsedMin));
@@ -349,7 +608,7 @@ function render({ transition, quiet } = {}) {
   strip.update(sample);
   $('#readout').innerHTML = readoutHtml(sample, a, t);
   $('#next-crossing').innerHTML = nextHtml(a, t);
-  const hud = `${SCENARIOS[state.scenario].label} · ${fmtElapsed(elapsedMs)}`;
+  const hud = `${scenarioLabel(state.scenario, state.slipDays)} · ${fmtElapsed(elapsedMs)}`;
   $('#globe-scn').textContent = `${site.name} · ${hud}`;
   $('#globe-t').textContent = fmtUtc(t, { year: true });
   $('#surf-t').textContent = `${hud} · ${fmtUtc(t)}`;
@@ -358,14 +617,18 @@ function render({ transition, quiet } = {}) {
 
   if (globe && toMoonFixed) {
     globe.update({
-      siteId: state.site,
+      site,
       sunDir: toMoonFixed(site.lat, site.lonE, sample.sun.az, sample.sun.el),
       earthDir: toMoonFixed(site.lat, site.lonE, sample.earth.az, sample.earth.el),
       transition,
     });
   }
-  if (surface) surface.update({ siteId: state.site, sample });
-  if (!quiet) announce(a, t, sample);
+  // The surface camera re-aims when the site or the original touchdown changes.
+  if (surface) surface.update({ siteId: `${site.id}|${site.lat}|${site.lonE}|${state.startMs}`, sample });
+  if (!quiet) {
+    announce(a, t, sample);
+    scheduleUrlSync();
+  }
 }
 
 // Methods: sites list
@@ -376,7 +639,34 @@ $('#sites-list').innerHTML = Object.values(SITES)
 buildSitePicker();
 buildScenarioSwitch();
 buildScrubTicks();
-render();
+
+// A shared address that points at a reference plan can open at once. Anything
+// else waits for the Moon table.
+const urlPatch = patchFromUrl();
+const urlNeedsTable =
+  urlPatch && !isPreset(siteIn({ ...state, ...urlPatch }), urlPatch.startMs ?? state.startMs, urlPatch.slipDays ?? state.slipDays);
+if (urlPatch && !urlNeedsTable) Object.assign(state, urlPatch);
+render({ quiet: true });
+
+loadEphemeris()
+  .then((table) => {
+    eph = table;
+    startInput.disabled = false;
+    slipRange.disabled = false;
+    siteMore.disabled = false;
+    startInput.min = toInputValue(eph.startMs);
+    startInput.max = toInputValue(eph.endMs - (WINDOW_HOURS * HOUR_MS + DAY_MS));
+    planMessage(READY_MSG);
+    if (urlNeedsTable) {
+      const next = { ...state, ...urlPatch };
+      if (planProblem(next.startMs, next.slipDays)) planMessage('That link is outside 2024 through 2030. Showing the reference plan.', true);
+      else setState(urlPatch);
+    }
+  })
+  .catch((err) => {
+    console.error('Moon table unavailable', err);
+    planMessage('Other sites and dates could not load. The four reference scenarios still work.', true);
+  });
 
 // Re-render the strip on resize (it's an SVG sized to its container).
 let rz;
@@ -401,10 +691,10 @@ if (webglOk()) {
   Promise.all([import('./three/globe.js'), import('./three/surface.js'), import('./three/geo.js')])
     .then(([g, s, geo]) => {
       toMoonFixed = geo.azElToMoonFixed;
-      globe = g.createGlobe($('#globe'), SITES);
+      globe = g.createGlobe($('#globe'), FEATURED);
       surface = s.createSurface($('#surface'));
       document.body.classList.add('has-3d');
-      render();
+      render({ quiet: true });
     })
     .catch((err) => {
       console.error('3D views unavailable', err);
@@ -415,4 +705,4 @@ if (webglOk()) {
 }
 
 // Expose for QA in the console.
-window.__longShadow = { state, A, setState, HOUR_MS };
+window.__longShadow = { state, A, pair, setState, HOUR_MS };

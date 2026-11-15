@@ -87,6 +87,8 @@ export const SITES = {
     id: 'athena',
     name: 'Athena',
     mission: 'Intuitive Machines IM-2',
+    sub: 'South pole',
+    featured: true,
     lat: -84.7906,
     lonE: 29.1957,
     coordLabel: '84.7906° S, 29.1957° E',
@@ -97,18 +99,112 @@ export const SITES = {
     id: 'blueGhost',
     name: 'Blue Ghost',
     mission: 'Firefly Blue Ghost Mission 1',
+    sub: 'Mare Crisium',
+    featured: true,
     lat: 18.562,
     lonE: 61.81,
     coordLabel: '18.562° N, 61.810° E',
     region: 'Mare Crisium, near Mons Latreille',
     blurb: 'A mid-latitude near-side site: Earth hangs high all stay, the Sun follows the lunar day.',
   },
+  // The sites below use the bundled Moon table (see src/window.js). Coordinates are from
+  // the NASA NSSDCA table of lunar landing sites, the same source as the two presets.
+  odysseus: {
+    id: 'odysseus',
+    name: 'Odysseus',
+    mission: 'Intuitive Machines IM-1',
+    lat: -80.13,
+    lonE: 1.44,
+    coordLabel: '80.13° S, 1.44° E',
+    region: 'Near Malapert A crater, south polar region',
+  },
+  chandrayaan3: {
+    id: 'chandrayaan3',
+    name: 'Chandrayaan-3',
+    mission: 'ISRO Chandrayaan-3',
+    lat: -69.3741,
+    lonE: 32.32,
+    coordLabel: '69.3741° S, 32.32° E',
+    region: 'Southern highlands, near side',
+  },
+  slim: {
+    id: 'slim',
+    name: 'SLIM',
+    mission: 'JAXA SLIM',
+    lat: -13.316,
+    lonE: 25.251,
+    coordLabel: '13.3160° S, 25.2510° E',
+    region: 'Near Shioli crater',
+  },
+  apollo11: {
+    id: 'apollo11',
+    name: 'Apollo 11',
+    mission: 'NASA Apollo 11',
+    lat: 0.67416,
+    lonE: 23.47314,
+    coordLabel: '0.67416° N, 23.47314° E',
+    region: 'Mare Tranquillitatis',
+  },
+  apollo17: {
+    id: 'apollo17',
+    name: 'Apollo 17',
+    mission: 'NASA Apollo 17',
+    lat: 20.1911,
+    lonE: 30.7723,
+    coordLabel: '20.1911° N, 30.7723° E',
+    region: 'Taurus-Littrow valley',
+  },
+  change4: {
+    id: 'change4',
+    name: "Chang'e 4",
+    mission: "CNSA Chang'e 4",
+    lat: -45.4561,
+    lonE: 177.5885,
+    coordLabel: '45.4561° S, 177.5885° E',
+    region: 'Von Kármán crater, far side',
+  },
+  change6: {
+    id: 'change6',
+    name: "Chang'e 6",
+    mission: "CNSA Chang'e 6",
+    lat: -41.6385,
+    lonE: 206.0148,
+    coordLabel: '41.6385° S, 153.9852° W',
+    region: 'Apollo basin, far side',
+  },
 };
+
+export const FEATURED = Object.fromEntries(Object.entries(SITES).filter(([, s]) => s.featured));
+
+/** A point typed in by the user. Longitude is stored east-positive in [0, 360). */
+export function customSite(lat, lon) {
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new RangeError('Latitude must be between -90 and 90.');
+  if (!Number.isFinite(lon) || lon < -180 || lon > 360) throw new RangeError('Longitude must be between -180 and 360.');
+  // Keep an in-range value exactly as typed. The modulo adds float noise.
+  const lonE = lon >= 0 && lon < 360 ? lon : ((lon % 360) + 360) % 360;
+  const lonSigned = lonE > 180 ? lonE - 360 : lonE;
+  const trim = (v) => String(Math.round(Math.abs(v) * 10000) / 10000);
+  return {
+    id: 'custom',
+    name: 'Custom site',
+    mission: 'Coordinates entered by the user',
+    lat,
+    lonE,
+    coordLabel: `${trim(lat)}° ${lat < 0 ? 'S' : 'N'}, ${trim(lonSigned)}° ${lonSigned < 0 ? 'W' : 'E'}`,
+    region: 'Smooth-sphere point at zero altitude',
+  };
+}
 
 export const SCENARIOS = {
   original: { id: 'original', label: 'Original', startIso: '2025-03-15T00:00:00Z' },
   delayed: { id: 'delayed', label: 'Delayed +9 d', startIso: '2025-03-24T00:00:00Z' },
 };
+
+/** The reference plan that the four Horizons CSVs cover. */
+export const PRESET_START_MS = Date.parse(SCENARIOS.original.startIso);
+export const PRESET_SLIP_DAYS = 9;
+
+export const scenarioLabel = (id, slipDays) => (id === 'original' ? 'Original' : `Delayed +${slipDays} d`);
 
 const RAW = {
   athena: { original: athenaOriginal, delayed: athenaDelayed },

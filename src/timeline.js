@@ -2,8 +2,8 @@
 // 0–72 h axis with a shared elapsed-time cursor. Plain HTML so it reflows
 // cleanly down to phone widths and stays readable without colour.
 import { HOUR_MS } from './calc.js';
-import { fmtHours, fmtUtc, fmtUtcTime, fmtElapsed, EVENT_NAME } from './format.js';
-import { SCENARIOS } from './data.js';
+import { fmtHours, fmtUtc, fmtUtcTime, fmtElapsed, slipShort, EVENT_NAME } from './format.js';
+import { scenarioLabel } from './data.js';
 import { icon } from './icons.js';
 
 const WINDOW_H = 72;
@@ -52,7 +52,6 @@ export function createTimelines(root, { onSelect }) {
   }
 
   function panelHtml(a) {
-    const sc = SCENARIOS[a.scenario];
     const rows = ROWS.map(
       (r) => `<div class="tl-row ${r.cls}">
         <span class="tl-label">${icon(r.key)}<span>${r.label}</span></span>
@@ -65,7 +64,7 @@ export function createTimelines(root, { onSelect }) {
       : 'No horizon crossings';
     return `<div class="tl-panel" data-scenario="${a.scenario}">
       <button type="button" class="tl-head" data-scenario="${a.scenario}">
-        <span class="tl-scn">${a.scenario === 'original' ? 'Original' : 'Delayed +9 days'}</span>
+        <span class="tl-scn">${a.scenario === 'original' ? 'Original' : `Delayed +${slipShort(a.slipDays)}`}</span>
         <span class="tl-date num">Touchdown ${fmtUtc(a.start, { year: true })}</span>
         <span class="tl-head-ev num">${evText}</span>
         <span class="tl-active" aria-hidden="true"></span>
@@ -91,7 +90,7 @@ export function createTimelines(root, { onSelect }) {
         const evs = a.events.length
           ? a.events.map((e) => `${EVENT_NAME[e.body][e.type]} at ${fmtUtc(e.t, { year: true })} (${fmtElapsed(e.t - a.start)})`).join('; ')
           : 'No horizon crossings';
-        return `<tr><th scope="row">${SCENARIOS[a.scenario].label}, touchdown ${fmtUtc(a.start, { year: true })}</th>
+        return `<tr><th scope="row">${scenarioLabel(a.scenario, a.slipDays)}, touchdown ${fmtUtc(a.start, { year: true })}</th>
           <td>${fmtHours(a.bodies.sun.hours)} h</td><td>${fmtHours(a.bodies.earth.hours)} h</td><td>${fmtHours(a.both.hours)} h</td><td>${evs}</td></tr>`;
       })
       .join('');
