@@ -719,8 +719,14 @@ function render({ transition, quiet } = {}) {
       transition,
     });
   }
-  // The surface camera re-aims when the site or the original touchdown changes.
-  if (surface) surface.update({ siteId: `${site.id}|${site.lat}|${site.lonE}|${state.startMs}`, sample });
+  // The surface camera re-frames when the site, touchdown, slip or scenario changes,
+  // and follows the Sun and Earth during playback until the user drags the view.
+  if (surface) {
+    surface.update({
+      viewKey: `${site.id}|${site.lat}|${site.lonE}|${state.startMs}|${state.slipDays}|${state.scenario}`,
+      sample,
+    });
+  }
   if (!quiet) {
     announce(a, t, sample);
     scheduleUrlSync();

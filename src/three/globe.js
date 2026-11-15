@@ -57,6 +57,163 @@ function earthMaterial() {
   });
 }
 
+// ───────────── Travel path between sites ─────────────
+// When the landing site changes, a dotted arc lifts off the old pin and draws
+// itself to the new one along the great circle, its dots marching toward the
+// destination, then fades. All placement happens in the vertex shader, so the
+// arc is one draw call and costs nothing between site changes.
+const PATH = {
+  spacing: 0.032, // radians of arc between dots
+  dotSize: 0.016, // world units (Moon radius = 1)
+  headSize: 0.05,
+  march: 1.7, // dot spacings per second the dots travel toward the new site
+  hold: 1500, // ms the finished path stays before fading
+  fade: 900, // ms
+};
+
+const pathVertex = `
+  uniform vec3 uA; uniform vec3 uB; uniform float uOmega; uniform float uLift;
+  uniform float uProgress; uniform float uPhase; uniform float uCount;
+  uniform float uSize; uniform float uPxPerUnit; uniform float uHead;
+  attribute float aIndex;
+  varying float vT; varying float vAlpha;
+  vec3 arc(float t) {
+    float s = sin(uOmega);
+    vec3 p = (sin((1.0 - t) * uOmega) * uA + sin(t * uOmega) * uB) / s;
+    return normalize(p) * (1.003 + uLift * sin(3.14159265 * t));
+  }
+  void main() {
+    float t = uHead > 0.5 ? uProgress : (aIndex + uPhase) / uCount;
+    vT = t;
+    // Reveal up to the drawing tip; soften both ends.
+    float tip = uHead > 0.5 ? 1.0 : smoothstep(uProgress, uProgress - 0.04, t);
+    float tail = smoothstep(0.0, 0.05, t);
+    vAlpha = tip * tail;
+    vec4 mv = modelViewMatrix * vec4(arc(clamp(t, 0.0, 1.0)), 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = uSize * uPxPerUnit / -mv.z;
+  }`;
+
+const pathFragment = `
+  uniform vec3 uColor; uniform float uOpacity; uniform float uHead;
+  varying float vT; varying float vAlpha;
+  void main() {
+    vec2 c = gl_PointCoord - 0.5;
+    float d = length(c) * 2.0;
+    if (d > 1.0 || vAlpha <= 0.001) discard;
+    float core = 1.0 - smoothstep(0.55, 1.0, d);
+    float glow = uHead > 0.5 ? (1.0 - d) * (1.0 - d) : 0.0;
+    float a = (uHead > 0.5 ? max(core * 0.9, glow) : core) * vAlpha * uOpacity;
+    gl_FragColor = vec4(uColor, a);
+    #include <colorspace_fragment>
+  }`;
+
+function createTravelPath(scene) {
+  const MAX_DOTS = 160;
+  const idx = new Float32Array(MAX_DOTS).map((_, i) => i);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_DOTS * 3), 3));
+  geo.setAttribute('aIndex', new THREE.BufferAttribute(idx, 1));
+  const uniforms = {
+    uA: { value: new THREE.Vector3(1, 0, 0) },
+    uB: { value: new THREE.Vector3(0, 1, 0) },
+    uOmega: { value: 1 },
+    uLift: { value: 0.1 },
+    uProgress: { value: 0 },
+    uPhase: { value: 0 },
+    uCount: { value: 10 },
+    uSize: { value: PATH.dotSize },
+    uPxPerUnit: { value: 500 },
+    uHead: { value: 0 },
+    uColor: { value: new THREE.Color(0xffffff) },
+    uOpacity: { value: 0 },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: pathVertex,
+    fragmentShader: pathFragment,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const dots = new THREE.Points(geo, mat);
+  dots.frustumCulled = false;
+  dots.visible = false;
+
+  const headGeo = new THREE.BufferGeometry();
+  headGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  headGeo.setAttribute('aIndex', new THREE.BufferAttribute(new Float32Array(1), 1));
+  const headUniforms = { ...uniforms, uHead: { value: 1 }, uSize: { value: PATH.headSize }, uOpacity: { value: 0 } };
+  const head = new THREE.Points(
+    headGeo,
+    new THREE.ShaderMaterial({
+      uniforms: headUniforms,
+      vertexShader: pathVertex,
+      fragmentShader: pathFragment,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  head.frustumCulled = false;
+  head.visible = false;
+  scene.add(dots, head);
+
+  let anim = null;
+
+  /** Start a path from unit vector a to unit vector b. */
+  function start(a, b, now) {
+    let omega = a.angleTo(b);
+    if (omega < 0.01) return stop();
+    const B = b.clone();
+    if (Math.PI - omega < 0.01) {
+      // Antipodes: any great circle works; bend through a perpendicular.
+      const perp = new THREE.Vector3(0, 1, 0).cross(a);
+      if (perp.lengthSq() < 1e-6) perp.set(1, 0, 0);
+      B.addScaledVector(perp.normalize(), 0.02).normalize();
+      omega = a.angleTo(B);
+    }
+    const count = Math.min(MAX_DOTS, Math.max(6, Math.round(omega / PATH.spacing)));
+    uniforms.uA.value.copy(a);
+    uniforms.uB.value.copy(B);
+    uniforms.uOmega.value = omega;
+    uniforms.uLift.value = 0.04 + 0.22 * (omega / Math.PI);
+    uniforms.uCount.value = count;
+    geo.setDrawRange(0, count);
+    dots.visible = head.visible = true;
+    anim = { t0: now, draw: 700 + 700 * (omega / Math.PI) };
+  }
+
+  function stop() {
+    anim = null;
+    dots.visible = head.visible = false;
+  }
+
+  /** Per-frame update. Returns true while the path is on screen. */
+  function tick(now) {
+    if (!anim) return false;
+    const el = now - anim.t0;
+    const drawT = Math.min(el / anim.draw, 1);
+    uniforms.uProgress.value = easeInOut(drawT);
+    // March: dots slide toward the destination; dot i moves into dot i+1's place.
+    uniforms.uPhase.value = ((el / 1000) * PATH.march) % 1;
+    const fadeT = (el - anim.draw - PATH.hold) / PATH.fade;
+    const opacity = fadeT <= 0 ? 1 : Math.max(0, 1 - fadeT);
+    uniforms.uOpacity.value = opacity * 0.95;
+    // The head is a comet tip while drawing, then a soft beacon on arrival that fades first.
+    headUniforms.uProgress.value = uniforms.uProgress.value;
+    headUniforms.uOpacity.value = drawT < 1 ? 1 : Math.max(0, 1 - (el - anim.draw) / 500);
+    if (fadeT >= 1) stop();
+    return true;
+  }
+
+  function setPxPerUnit(px) {
+    uniforms.uPxPerUnit.value = px;
+  }
+
+  return { start, stop, tick, setPxPerUnit };
+}
+
 export function createGlobe(container, sites) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -143,6 +300,8 @@ export function createGlobe(container, sites) {
 
   scene.add(starfield(1600, 60, 5));
 
+  const travel = createTravelPath(scene);
+
   // Site pins
   const pins = {};
   const UP = new THREE.Vector3(0, 1, 0);
@@ -194,6 +353,7 @@ export function createGlobe(container, sites) {
   const state = {
     site: null,
     siteKey: null,
+    siteDir: null, // unit vector of the current site, for the travel path
     sunDir: new THREE.Vector3(1, 0, 0),
     earthDir: new THREE.Vector3(0, 0, 1),
   };
@@ -225,6 +385,7 @@ export function createGlobe(container, sites) {
     const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
     fitDist = 1.12 / Math.sin(Math.min(vHalf, hHalf));
+    travel.setPxPerUnit(renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan(vHalf)));
     controls.maxDistance = fitDist * 1.8;
     if (!camAnim && state.site) camera.position.setLength(fitDist);
     loop.invalidate();
@@ -254,6 +415,7 @@ export function createGlobe(container, sites) {
         loop.release();
       }
     }
+    travel.tick(now);
     const pulse = 1 + 0.25 * Math.sin(now / 380);
     for (const [id, p] of Object.entries(pins)) {
       const active = id === state.site;
@@ -296,6 +458,10 @@ export function createGlobe(container, sites) {
     const siteKey = `${site.id}|${site.lat}|${site.lonE}`;
     if (siteKey !== state.siteKey) {
       const preset = Object.hasOwn(sites, site.id);
+      // Dotted travel path from the previous site to this one.
+      const to = latLonToThree(site.lat, site.lonE, 1).normalize();
+      if (state.siteDir && !reduceMotion) travel.start(state.siteDir, to, performance.now());
+      state.siteDir = to;
       pins[EXTRA_PIN].g.visible = !preset;
       if (!preset) placePin(pins[EXTRA_PIN], site);
       frameSite(site, state.siteKey !== null);
