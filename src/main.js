@@ -4,22 +4,27 @@ import '@fontsource/ibm-plex-mono/500.css';
 import './styles.css';
 
 import { DATASETS, SITES, FEATURED, PRESET_START_MS, PRESET_SLIP_DAYS, customSite, scenarioLabel } from './data.js';
-import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, HOUR_MS } from './calc.js';
+import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, eclipseAt, HOUR_MS } from './calc.js';
 import {
-  fmtHours, fmtUtc, fmtDuration, fmtElapsed, fmtDeg, fmtChange, fmtDay, fmtClock, slipWords, slipShort, compass,
-  EVENT_NAME,
+  fmtHours, fmtUtc, fmtUtcTime, fmtDuration, fmtElapsed, fmtDeg, fmtChange, fmtDay, fmtClock, slipWords, slipShort,
+  compass, EVENT_NAME,
 } from './format.js';
 import { createTimelines } from './timeline.js';
 import { createSkyStrip } from './skystrip.js';
+import { createSlipStrip } from './slipstrip.js';
 import { icon } from './icons.js';
-import { buildRows, WINDOW_HOURS } from './window.js';
+import { WINDOW_HOURS } from './window.js';
 import { loadEphemeris } from './ephemeris.js';
+import { eclipseIntervals } from './eclipse.js';
+import { analyzeStay, slipSeries, rankSlips, slipCell } from './slips.js';
 
 const $ = (s) => document.querySelector(s);
 const MAX_MIN = WINDOW_HOURS * 60;
 const DAY_MS = 24 * HOUR_MS;
+const STAY_MS = WINDOW_HOURS * HOUR_MS;
 const MAX_SLIP_DAYS = 30;
 const MAX_CACHED_PAIRS = 64;
+const MAX_CACHED_SERIES = 16;
 
 // ───────────── Scenario pairs: Horizons presets, or the bundled Moon table ─────────────
 // The four reference scenarios read the Horizons CSVs directly. Any other site,
@@ -39,16 +44,17 @@ function pairFor(site, startMs, slipDays) {
   let pair;
   if (isPreset(site, startMs, slipDays)) {
     const ds = DATASETS[site.id];
+    // The Horizons files carry no eclipse data. Once the Moon table is in, check them too.
+    const eclipseFor = (rows) => (eph ? { eclipse: eclipseIntervals(eph, site, rows[0].t, rows[0].t + STAY_MS) } : {});
     pair = {
       key,
       source: 'horizons',
-      original: analyze({ ...ds.original, slipDays }),
-      delayed: analyze({ ...ds.delayed, slipDays }),
+      original: analyze({ ...ds.original, slipDays, ...eclipseFor(ds.original.rows) }),
+      delayed: analyze({ ...ds.delayed, slipDays, ...eclipseFor(ds.delayed.rows) }),
     };
   } else {
     if (!eph) return null;
-    const build = (scenario, t0) =>
-      analyze({ site: site.id, scenario, file: null, slipDays, rows: buildRows(eph, site, t0) });
+    const build = (scenario, t0) => analyzeStay(eph, site, t0, { site: site.id, scenario, file: null, slipDays });
     pair = {
       key,
       source: 'table',
@@ -124,15 +130,24 @@ function answerHtml(p, site, slipDays) {
   }
   const earlier = `The original touchdown offers ${fmtHours(o.both.hours)} hours with both above the horizon.`;
   const where = site.id === 'custom' ? 'this custom site' : site.name;
-  return `<strong>At ${where}, a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}`;
+  const eclipse = [['original', o], ['delayed', d]]
+    .filter(([, a]) => a.eclipse.any.length)
+    .map(([name, a]) =>
+      a.eclipse.totalHours > 0
+        ? ` In the ${name} stay Earth fully covers the Sun for ${fmtDuration(a.eclipse.totalHours * HOUR_MS)}, counted as no sunlight.`
+        : ` In the ${name} stay Earth partly covers the Sun for a while.`,
+    )
+    .join('');
+  return `<strong>At ${where}, a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}${eclipse}`;
 }
 
 function metricsHtml(p) {
   const o = p.original;
   const d = p.delayed;
   const ch = delayImpact(o, d);
+  const sunNote = o.eclipse.totalHours > 0 || d.eclipse.totalHours > 0 ? 'solar power, less time behind Earth' : 'solar power';
   const rows = [
-    { k: 'sun', label: 'Sun above horizon', note: 'solar power', o: o.bodies.sun.hours, d: d.bodies.sun.hours, c: ch.sun },
+    { k: 'sun', label: 'Sun above horizon', note: sunNote, o: o.bodies.sun.hours, d: d.bodies.sun.hours, c: ch.sun },
     { k: 'earth', label: 'Earth above horizon', note: 'direct radio', o: o.bodies.earth.hours, d: d.bodies.earth.hours, c: ch.earth },
     { k: 'both', label: 'Both above horizon', note: 'power + radio', o: o.both.hours, d: d.both.hours, c: ch.both },
   ];
@@ -438,6 +453,75 @@ const stepBy = (d) => {
 $('#step-back').addEventListener('click', () => stepBy(-60));
 $('#step-fwd').addEventListener('click', () => stepBy(60));
 
+// ───────────── Eclipse replay: Mar 14, 2025 at the Blue Ghost site ─────────────
+// A 72 hour window that starts on Mar 13, during Blue Ghost's mission. It needs the Moon table.
+const ECLIPSE_REPLAY = {
+  site: 'blueGhost',
+  scenario: 'original',
+  startMs: Date.parse('2025-03-13T00:00:00Z'),
+  slipDays: PRESET_SLIP_DAYS,
+};
+const ECLIPSE_LEAD_MIN = 3 * 60;
+const eclipseStay = () =>
+  eph ? pairFor(SITES.blueGhost, ECLIPSE_REPLAY.startMs, ECLIPSE_REPLAY.slipDays).original : null;
+const eclipseSpan = ([s, e]) => `${fmtUtcTime(s)} to ${fmtUtcTime(e)} UTC`;
+
+function replayEclipse() {
+  const stay = eclipseStay();
+  const total = stay?.eclipse.total[0];
+  if (!total) return planMessage('Still loading the Moon table. Try again in a moment.', true);
+  stopAnim();
+  setState({ ...ECLIPSE_REPLAY });
+  document.querySelector('.sky').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+  const startMin = (total[0] - stay.start) / 60_000;
+  const midMin = ((total[0] + total[1]) / 2 - stay.start) / 60_000;
+  const done = () => {
+    setState({ elapsedMin: midMin });
+    showToast(
+      `<b>Sun behind Earth</b> <span class="num">${eclipseSpan(total)}</span><span class="toast-sub">Model, Mar 14, 2025 at the Blue Ghost site. Reported totality for the whole Moon: 06:26 to 07:31 UTC.</span>`,
+    );
+    $('#live').textContent = `Replay: the Sun is behind Earth at the Blue Ghost site, ${eclipseSpan(total)}, Mar 14, 2025.`;
+  };
+  if (reduceMotion) return done();
+  setTimeout(
+    () =>
+      animateTo(midMin, 5200, {
+        from: Math.max(startMin - ECLIPSE_LEAD_MIN, 0),
+        onDone: done,
+        ease: (t) => 1 - Math.pow(1 - t, 2.2),
+      }),
+    450,
+  );
+}
+$('#eclipse-btn').addEventListener('click', replayEclipse);
+
+// ───────────── Slip strip ─────────────
+const seriesCache = new Map();
+const slipStrip = createSlipStrip($('#slips'), {
+  onPick: (slipDays) => {
+    stopAnim();
+    if (slipDays === 0) return setState({ scenario: 'original', transition: true });
+    const problem = planProblem(state.startMs, slipDays);
+    if (problem) return planMessage(problem, true);
+    setState({ slipDays, scenario: 'delayed', transition: true });
+  },
+});
+
+/** Hours for every slip at this site and touchdown. The cells for slip 0 and the chosen slip come from the pair on screen. */
+function renderSlips(p, site) {
+  if (!eph) return;
+  const key = `${site.id}|${site.lat}|${site.lonE}|${state.startMs}`;
+  if (!seriesCache.has(key)) {
+    if (seriesCache.size >= MAX_CACHED_SERIES) seriesCache.clear();
+    seriesCache.set(key, slipSeries(eph, site, state.startMs, MAX_SLIP_DAYS));
+  }
+  const cells = seriesCache.get(key).map((c) => {
+    if (c.slipDays === 0) return slipCell(0, p.original);
+    return c.slipDays === state.slipDays ? slipCell(c.slipDays, p.delayed) : c;
+  });
+  slipStrip.render({ cells, rank: rankSlips(cells) });
+}
+
 // ───────────── Touchdown buttons ─────────────
 $('#td-original').addEventListener('click', () => setState({ scenario: 'original', transition: true }));
 $('#td-delayed').addEventListener('click', () => setState({ scenario: 'delayed', transition: true }));
@@ -463,9 +547,17 @@ function readoutHtml(sample, a, t) {
     .map((b) => {
       const s = sample[b];
       const up = aboveAt(a, b, t);
+      const covered = b === 'sun' && up ? eclipseAt(a, t) : null;
+      const status = !up
+        ? '▼ Below horizon'
+        : covered === 'total'
+          ? '▲ Above horizon, behind Earth'
+          : covered === 'partial'
+            ? '▲ Above horizon, partly behind Earth'
+            : '▲ Above horizon';
       return `<div class="ro ro-${b} ${up ? 'up' : 'down'}">
         <dt>${icon(b)}${b === 'sun' ? 'Sun' : 'Earth'}</dt>
-        <dd class="ro-status">${up ? '▲ Above horizon' : '▼ Below horizon'}</dd>
+        <dd class="ro-status">${status}</dd>
         <dd class="num ro-el"><span class="ro-k">Elevation</span>${fmtDeg(s.el)}</dd>
         <dd class="num ro-az"><span class="ro-k">Azimuth</span>${s.az.toFixed(1)}° ${compass(s.az)}</dd>
       </div>`;
@@ -536,6 +628,7 @@ function renderPlan(p, site) {
     `<span class="num">${site.coordLabel}</span> · ${site.region}<span class="site-src">${site.mission} · ${source}</span>`;
   $('#surf-site').textContent = `${site.name} · ${site.coordLabel}`;
   timelines.render([o, d]);
+  renderSlips(p, site);
 
   $('#slip-words').textContent = slipWords(state.slipDays);
   $('#td-original-date').textContent = fmtDay(o.start, { year: true });
@@ -613,7 +706,10 @@ function render({ transition, quiet } = {}) {
   $('#globe-t').textContent = fmtUtc(t, { year: true });
   $('#surf-t').textContent = `${hud} · ${fmtUtc(t)}`;
   const sUp = aboveAt(a, 'sun', t), eUp = aboveAt(a, 'earth', t);
-  $('#surf-state').innerHTML = `<span class="st ${sUp ? 'on' : ''}">${icon('sun')}Sun ${sUp ? 'up' : 'down'}</span><span class="st ${eUp ? 'on' : ''}">${icon('earth')}Earth ${eUp ? 'up' : 'down'}</span>${!sUp ? '<span class="st-dark">Modeled darkness</span>' : ''}`;
+  const sunHidden = sUp && eclipseAt(a, t) === 'total';
+  const darkNote = !sUp ? 'Modeled darkness' : sunHidden ? 'Sun behind Earth' : '';
+  $('#surf-state').innerHTML = `<span class="st ${sUp ? 'on' : ''}">${icon('sun')}Sun ${sUp ? 'up' : 'down'}</span><span class="st ${eUp ? 'on' : ''}">${icon('earth')}Earth ${eUp ? 'up' : 'down'}</span>${darkNote ? `<span class="st-dark">${darkNote}</span>` : ''}`;
+  slipStrip.update({ slipDays: state.slipDays, scenario: state.scenario });
 
   if (globe && toMoonFixed) {
     globe.update({
@@ -657,6 +753,15 @@ loadEphemeris()
     startInput.min = toInputValue(eph.startMs);
     startInput.max = toInputValue(eph.endMs - (WINDOW_HOURS * HOUR_MS + DAY_MS));
     planMessage(READY_MSG);
+    // Pairs built before the table arrived have no eclipse check. Rebuild them and draw the slip strip.
+    pairCache.clear();
+    renderedKey = null;
+    render({ quiet: true });
+    const eclipse = eclipseStay()?.eclipse.total[0];
+    if (eclipse) {
+      $('#rp-eclipse-model').textContent = eclipseSpan(eclipse);
+      $('#eclipse-btn').disabled = false;
+    }
     if (urlNeedsTable) {
       const next = { ...state, ...urlPatch };
       if (planProblem(next.startMs, next.slipDays)) planMessage('That link is outside 2024 through 2030. Showing the reference plan.', true);
@@ -666,6 +771,7 @@ loadEphemeris()
   .catch((err) => {
     console.error('Moon table unavailable', err);
     planMessage('Other sites and dates could not load. The four reference scenarios still work.', true);
+    slipStrip.message('The slip strip needs the Moon table, which did not load.');
   });
 
 // Re-render the strip on resize (it's an SVG sized to its container).
