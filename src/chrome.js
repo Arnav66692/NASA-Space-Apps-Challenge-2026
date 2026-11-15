@@ -242,6 +242,7 @@ export function initChrome() {
           c.y = c.ty;
           cursor.classList.add('is-live');
         }
+        globe?.setPointer((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1);
       },
       { passive: true },
     );
@@ -308,10 +309,11 @@ export function initChrome() {
     const intro = document.querySelector('[data-intro]');
     if (!root.classList.contains('intro-on')) return reveal();
     const fill = intro.querySelector('[data-intro-fill]');
-    const ready = { fonts: false, scene: false, table: false };
+    const ready = { fonts: false, scene: false, moon: false, table: false };
     document.fonts?.ready.then(() => (ready.fonts = true));
     const check = () => {
       ready.scene = document.body.classList.contains('has-3d') || document.body.classList.contains('no-3d');
+      ready.moon = document.body.classList.contains('moon-ready') || document.body.classList.contains('no-3d');
       ready.table =
         !document.getElementById('start-input').disabled || document.getElementById('plan-msg').classList.contains('is-error');
     };
@@ -331,7 +333,7 @@ export function initChrome() {
       if (finished) return;
       check();
       const elapsed = now - t0;
-      const done = Object.values(ready).filter(Boolean).length / 3;
+      const done = Object.values(ready).filter(Boolean).length / Object.keys(ready).length;
       const loaded = elapsed > INTRO_MAX_MS ? 1 : 0.15 + 0.85 * done;
       const target = Math.min(loaded, elapsed / INTRO_MIN_MS);
       shown += (target - shown) * 0.12;

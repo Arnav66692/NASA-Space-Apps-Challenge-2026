@@ -81,6 +81,9 @@ src/slipstrip.js  the slip strip view
 src/unseen.css    the look: loads after styles.css and restyles it
 src/chrome.js     header, menu, cursor ring, the opening, and the switch between home and the navigator
 src/fonts/        Inter and Newsreader (SIL OFL 1.1), licences included
+src/three/moonmaps.js  loads the real Moon textures for the globe
+src/three/moon/   colour and relief textures built from NASA's CGI Moon Kit
+tools/build_moon_maps.py  rebuilds those textures
 src/format.js     all display rounding (after calculation)
 src/timeline.js   availability bars + shared cursor
 src/skystrip.js   2D horizon strip (SVG)
@@ -125,9 +128,13 @@ Not yet done:
 
 The look follows [unseen.co](https://unseen.co): a one-screen home over a live 3D scene, a transparent header with rolling nav letters, white pills and discs, a menu panel from the right, a cursor ring, and a dark long-scroll page for the tool. Layout, type scale and motion were matched to measurements of that site. All code here is original, and none of unseen's code, fonts, images or copy is used. Inter and Newsreader stand in for its two typefaces. The two small icons (arrow and close) are from Phosphor Icons (MIT).
 
-The home screen is the same globe as the navigator, zoomed until the Moon is a horizon. The day and night line on it comes from the JPL Sun direction for the plan on screen.
+The globe is the real Moon. Its colour is NASA's LRO Camera mosaic and its relief is made from LOLA laser altimeter elevation, both from the [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/) by NASA's Scientific Visualization Studio. `tools/build_moon_maps.py` builds the two textures in `src/three/moon/` from the kit's files. Relief is drawn about three times steeper than it is. Sunlight on the globe is added in the shader from the JPL Sun direction, and ground past the day and night line stays dark whatever its slope.
 
-Not done in this pass: sound, a film grain pass, and a real lunar surface map on the globe (it is still the procedural texture). The look was checked in Chrome at 1440, 1920, 1024 and 390 wide, with reduced motion, and with a shared link. It has not been checked in Safari or Firefox, or on a real phone.
+The home screen is the same globe seen from its night side, so the sunlit part is a crescent across the top. It is exposed brighter than the navigator's globe and has a soft fill light so the night side is not pure black.
+
+Check done: with Blue Ghost selected on Mar 6, 2025, the pin sits on Mare Crisium and the east half of the near side is lit, which matches a first quarter Moon.
+
+Not done in this pass: sound and a film grain pass. The surface view is still procedural. The look was checked in Chrome at 1440, 1920, 1024 and 390 wide, with reduced motion, and with a shared link. It has not been checked in Safari or Firefox, or on a real phone.
 
 ## Credits
 
