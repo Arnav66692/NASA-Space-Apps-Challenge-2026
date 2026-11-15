@@ -92,6 +92,19 @@
                 <button type="button" class="link-btn" id="copy-link">Copy link to this view</button>
               </div>
             </fieldset>
+
+            <div class="slips" id="slips" role="group" aria-labelledby="slips-k">
+              <div class="slips-head">
+                <span class="slips-k" id="slips-k">Every slip, 0 to 30 days</span>
+                <span class="slips-legend" aria-hidden="true">
+                  <span><i class="sl-sun"></i>Sun</span><span><i class="sl-earth"></i>Earth</span><span><i class="sl-both"></i>Both</span>
+                  <span>bar height is hours out of 72</span>
+                </span>
+              </div>
+              <div class="slips-grid" data-slips-grid></div>
+              <p class="slips-read" data-slips-read aria-live="polite">Loading the Moon table.</p>
+              <div class="sr"><table data-slips-table></table></div>
+            </div>
           </div>
 
           <div class="metrics" id="metrics">
@@ -213,6 +226,22 @@
               <button type="button" id="step-fwd" aria-label="Forward one hour">+1 h</button>
             </div>
           </div>
+
+          <div class="rp-eclipse">
+            <h3>Two days earlier, Earth covered the Sun.</h3>
+            <p>
+              On March 14, 2025 Earth passed in front of the Sun as seen from the Moon. On Earth it was a total
+              lunar eclipse. The model puts the Sun fully behind Earth at the Blue Ghost site from
+              <span class="num" id="rp-eclipse-model">06:18 to 08:35 UTC</span>. The reported totality for the
+              whole Moon was 06:26 to 07:31 UTC, and the model window covers it. A single site sits in Earth's
+              shadow longer than the whole Moon stays fully covered, so we say covers, not matches.
+              <a href="https://svs.gsfc.nasa.gov/5471" target="_blank" rel="noopener">NASA SVS: eclipse times ↗</a>
+            </p>
+            <button class="btn-ghost" id="eclipse-btn" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z" /></svg>
+              Replay the eclipse
+            </button>
+          </div>
         </div>
 
         <div class="rp-compare">
@@ -240,7 +269,7 @@
       <!-- ───────────── Methods ───────────── -->
       <section class="methods" id="methods" aria-labelledby="m-h">
         <h2 id="m-h">Methods &amp; sources</h2>
-        <p class="m-lede"><strong>Smooth-horizon estimate.</strong> Local terrain, eclipses, and lander hardware are outside this model.</p>
+        <p class="m-lede"><strong>Smooth-horizon estimate.</strong> Local terrain and lander hardware are outside this model.</p>
         <div class="m-grid">
           <div>
             <h3>What the numbers mean</h3>
@@ -248,7 +277,9 @@
               <strong>Sun above horizon</strong> marks a geometric opportunity for solar power.
               <strong>Earth above horizon</strong> marks a geometric opportunity for direct-to-Earth radio. A body
               counts as above when the centre of its disk is above the smooth reference horizon (elevation &gt; 0°).
-              On polar terrain, nearby ridges can materially change both windows.
+              On polar terrain, nearby ridges can materially change both windows. When Earth fully covers the Sun
+              (a lunar eclipse seen from the surface), that time is counted as no sunlight. Partial cover is marked
+              on the timeline and still counted as sunlight.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
             </p>
           </div>
@@ -288,8 +319,11 @@
               wholly below, rising, setting, overlap). Blue Ghost's sunset was bracketed with a separate five-minute
               JPL query. The table method was checked against direct JPL queries at 10 sites and 10 dates. The
               bar was 0.5° and was set before the check ran. All 200 Sun and Earth directions agree within
-              0.006°. The table also reproduces all 584 Sun and Earth directions in the four preset files within 0.006°. Eclipse
-              and lander-tilt validation are out of scope, and a test with first-time users has not been run yet.
+              0.006°. The table also reproduces all 584 Sun and Earth directions in the four preset files within 0.006°. For the
+              eclipse of March 14, 2025 the model puts the Sun behind Earth at the Blue Ghost site from 06:18 to
+              08:35 UTC, which covers the reported totality of 06:26 to 07:31 UTC. The slip strip uses the same
+              calculation as the table, and its cells match the four preset files within 0.2 hours. Lander-tilt
+              validation is out of scope, and a test with first-time users has not been run yet.
             </p>
           </div>
           <div>

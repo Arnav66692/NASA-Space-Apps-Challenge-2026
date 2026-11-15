@@ -63,6 +63,22 @@ export function intersect(a, b) {
   return mergeIntervals(out);
 }
 
+/** The parts of `a` that `b` does not cover. */
+export function subtractIntervals(a, b) {
+  const cuts = mergeIntervals(b.map(([s, e]) => [s, e]));
+  const out = [];
+  for (const [as, ae] of a) {
+    let cursor = as;
+    for (const [bs, be] of cuts) {
+      if (be <= cursor || bs >= ae) continue;
+      if (bs > cursor) out.push([cursor, bs]);
+      cursor = Math.max(cursor, be);
+    }
+    if (cursor < ae) out.push([cursor, ae]);
+  }
+  return out;
+}
+
 /** Rising / setting events derived from the merged intervals' interior edges. */
 export function crossingEvents(intervals, start, end, body) {
   const ev = [];
@@ -90,7 +106,20 @@ export function analyze(dataset) {
       whole: hours === 0 ? 'below' : Math.abs(hours - totalH) < 1e-9 ? 'above' : null,
     };
   }
-  const both = intersect(res.bodies.sun.intervals, res.bodies.earth.intervals);
+  // Earth in front of the Sun. The Sun stays above the horizon (intervals and
+  // events are unchanged) but gives no light, so sunlit hours leave it out.
+  const horizonSun = res.bodies.sun.intervals;
+  const eclipseTotal = intersect(dataset.eclipse?.total ?? [], horizonSun);
+  const eclipseAny = intersect(dataset.eclipse?.any ?? [], horizonSun);
+  const lit = eclipseTotal.length ? subtractIntervals(horizonSun, eclipseTotal) : horizonSun;
+  res.bodies.sun = {
+    ...res.bodies.sun,
+    lit,
+    hours: sumHours(lit),
+    horizonHours: res.bodies.sun.hours,
+  };
+  res.eclipse = { total: eclipseTotal, any: eclipseAny, totalHours: sumHours(eclipseTotal) };
+  const both = intersect(lit, res.bodies.earth.intervals);
   res.both = { intervals: both, hours: sumHours(both) };
   res.events = [...res.bodies.sun.events, ...res.bodies.earth.events].sort((x, y) => x.t - y.t);
   const elRange = rows.reduce(
@@ -140,6 +169,14 @@ export function sampleAt(rows, t) {
 export function aboveAt(analysis, body, t) {
   return analysis.bodies[body].intervals.some(([a, b]) => t >= a && t < b) ||
     (t === analysis.end && analysis.bodies[body].intervals.some(([, b]) => b === analysis.end));
+}
+
+/** Is Earth covering the Sun at `t`: 'total', 'partial' or null. Only while the Sun is above the horizon. */
+export function eclipseAt(analysis, t) {
+  const inside = (list) => list.some(([a, b]) => t >= a && t <= b);
+  if (inside(analysis.eclipse.total)) return 'total';
+  if (inside(analysis.eclipse.any)) return 'partial';
+  return null;
 }
 
 /** Step 6 — the next crossing after the selected instant, or null. */

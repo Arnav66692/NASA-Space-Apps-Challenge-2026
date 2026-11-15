@@ -2,7 +2,7 @@
 // 0–72 h axis with a shared elapsed-time cursor. Plain HTML so it reflows
 // cleanly down to phone widths and stays readable without colour.
 import { HOUR_MS } from './calc.js';
-import { fmtHours, fmtUtc, fmtUtcTime, fmtElapsed, slipShort, EVENT_NAME } from './format.js';
+import { fmtHours, fmtUtc, fmtUtcTime, fmtElapsed, fmtDuration, fmtDay, slipShort, EVENT_NAME } from './format.js';
 import { scenarioLabel } from './data.js';
 import { icon } from './icons.js';
 
@@ -19,7 +19,38 @@ export function createTimelines(root, { onSelect }) {
   let current = null;
 
   function rowIntervals(a, key) {
-    return key === 'both' ? a.both.intervals : a.bodies[key].intervals;
+    if (key === 'both') return a.both.intervals;
+    // The Sun bar shows sunlight, so time behind Earth is cut out of it.
+    return key === 'sun' ? a.bodies.sun.lit : a.bodies[key].intervals;
+  }
+
+  /** Hatched marks and one label for each stretch with Earth in front of the Sun. */
+  function eclipseHtml(a) {
+    const seg = ([s, e], cls) => {
+      const l = pct(s, a.start);
+      return `<span class="seg-ecl ${cls}" style="left:${l}%;width:${pct(e, a.start) - l}%"></span>`;
+    };
+    const label = ([s, e], text) => {
+      const x = pct(s, a.start);
+      return `<span class="tl-ev ecl ${x > 60 ? 'left' : 'right'}" style="left:${x}%">
+        <span class="tl-ev-tick" aria-hidden="true"></span>
+        <span class="tl-ev-label"><b>${text}</b> <span class="num">${fmtDuration(e - s)}</span><span class="tl-ev-utc num"> · ${fmtUtcTime(s)} to ${fmtUtcTime(e)} UTC</span></span>
+      </span>`;
+    };
+    const { total, any } = a.eclipse;
+    const marks = any.map((iv) => seg(iv, 'partial')).join('') + total.map((iv) => seg(iv, 'total')).join('');
+    const labels = total.length
+      ? total.map((iv) => label(iv, 'Sun behind Earth')).join('')
+      : any.map((iv) => label(iv, 'Sun partly behind Earth')).join('');
+    return marks + labels;
+  }
+
+  /** Plain words for the eclipse in a stay, or an empty string. */
+  function eclipseText(a) {
+    const { total, any } = a.eclipse;
+    const list = total.length ? total : any;
+    const what = total.length ? 'Sun behind Earth' : 'Sun partly behind Earth';
+    return list.map(([s, e]) => `${what} ${fmtDay(s)}, ${fmtUtcTime(s)} to ${fmtUtcTime(e)} UTC`).join(' · ');
   }
   function rowHours(a, key) {
     return key === 'both' ? a.both.hours : a.bodies[key].hours;
@@ -48,6 +79,7 @@ export function createTimelines(root, { onSelect }) {
         </span>`;
       }
     }
+    if (key === 'sun') html += eclipseHtml(a);
     return html;
   }
 
@@ -59,9 +91,10 @@ export function createTimelines(root, { onSelect }) {
         <span class="tl-total num"><b>${fmtHours(rowHours(a, r.key))}</b> h</span>
       </div>`,
     ).join('');
-    const evText = a.events.length
+    const crossings = a.events.length
       ? a.events.map((e) => `${EVENT_NAME[e.body][e.type]} ~${fmtUtc(e.t)}`).join(' · ')
       : 'No horizon crossings';
+    const evText = [crossings, eclipseText(a)].filter(Boolean).join(' · ');
     return `<div class="tl-panel" data-scenario="${a.scenario}">
       <button type="button" class="tl-head" data-scenario="${a.scenario}">
         <span class="tl-scn">${a.scenario === 'original' ? 'Original' : `Delayed +${slipShort(a.slipDays)}`}</span>
@@ -90,8 +123,10 @@ export function createTimelines(root, { onSelect }) {
         const evs = a.events.length
           ? a.events.map((e) => `${EVENT_NAME[e.body][e.type]} at ${fmtUtc(e.t, { year: true })} (${fmtElapsed(e.t - a.start)})`).join('; ')
           : 'No horizon crossings';
+        const ecl = eclipseText(a);
+        const evsAll = ecl ? `${evs}; ${ecl}` : evs;
         return `<tr><th scope="row">${scenarioLabel(a.scenario, a.slipDays)}, touchdown ${fmtUtc(a.start, { year: true })}</th>
-          <td>${fmtHours(a.bodies.sun.hours)} h</td><td>${fmtHours(a.bodies.earth.hours)} h</td><td>${fmtHours(a.both.hours)} h</td><td>${evs}</td></tr>`;
+          <td>${fmtHours(a.bodies.sun.hours)} h</td><td>${fmtHours(a.bodies.earth.hours)} h</td><td>${fmtHours(a.both.hours)} h</td><td>${evsAll}</td></tr>`;
       })
       .join('');
     return `<div class="sr"><table><caption>Above-horizon hours and crossings in the first 72 hours</caption>
