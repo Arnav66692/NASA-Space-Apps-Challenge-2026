@@ -1,0 +1,17 @@
+{
+  "source": "NASA JPL Horizons API, target Moon (301), center Earth geocenter (500@399), quantities 14, 15, 19, 20",
+  "frame": "MOON_ME, east longitude positive",
+  "start_utc": "2024-01-01T00:00:00Z",
+  "step_hours": 1,
+  "rows": 61369,
+  "columns": [
+    "earth_lon",
+    "earth_lat",
+    "sun_lon",
+    "sun_lat",
+    "sun_dist_au",
+    "earth_dist_au"
+  ],
+  "dtype": "float32 little-endian",
+  "built_utc": "2026-11-14T21:11:12Z"
+}

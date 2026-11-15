@@ -11,6 +11,11 @@ const VIEW = {
   athena: { lat: -50, lon: 20 },
   blueGhost: { lat: 14, lon: 52 },
 };
+// Sites without a hand-tuned view: look at them a little off-centre, and never
+// straight down a pole, so the terminator stays readable.
+const viewFor = (site) =>
+  VIEW[site.id] ?? { lat: THREE.MathUtils.clamp(site.lat * 0.62, -52, 52), lon: site.lonE - 9 };
+const EXTRA_PIN = '__extra';
 
 function greatCircle(color, dashed) {
   const pts = [];
@@ -140,9 +145,16 @@ export function createGlobe(container, sites) {
 
   // Site pins
   const pins = {};
-  for (const s of Object.values(sites)) {
-    const g = new THREE.Group();
+  const UP = new THREE.Vector3(0, 1, 0);
+  function placePin(pin, s) {
     const n = latLonToThree(s.lat, s.lonE, 1);
+    pin.g.position.copy(n);
+    pin.g.quaternion.setFromUnitVectors(UP, n.clone().normalize());
+    pin.normal = n.clone().normalize();
+    pin.lab.textContent = s.name;
+  }
+  function makePin(s) {
+    const g = new THREE.Group();
     const stem = new THREE.Mesh(
       new THREE.CylinderGeometry(0.0035, 0.0035, 0.09, 6),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }),
@@ -157,15 +169,19 @@ export function createGlobe(container, sites) {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.004;
     g.add(stem, head, ring);
-    g.position.copy(n);
-    g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n.clone().normalize());
     const lab = labelEl(s.name, 'lbl lbl-site');
     const lo = new CSS2DObject(lab);
     lo.position.set(0, 0.12, 0);
     g.add(lo);
     scene.add(g);
-    pins[s.id] = { g, ring, lab, normal: n.clone().normalize() };
+    const pin = { g, ring, lab, normal: new THREE.Vector3() };
+    placePin(pin, s);
+    return pin;
   }
+  for (const s of Object.values(sites)) pins[s.id] = makePin(s);
+  // One movable pin for any other site (more landing sites, custom coordinates).
+  pins[EXTRA_PIN] = makePin({ name: '', lat: 0, lonE: 0 });
+  pins[EXTRA_PIN].g.visible = false;
 
   function labelEl(text, cls) {
     const d = document.createElement('div');
@@ -177,6 +193,7 @@ export function createGlobe(container, sites) {
   // State
   const state = {
     site: null,
+    siteKey: null,
     sunDir: new THREE.Vector3(1, 0, 0),
     earthDir: new THREE.Vector3(0, 0, 1),
   };
@@ -245,7 +262,9 @@ export function createGlobe(container, sites) {
       p.lab.classList.toggle('is-active', active);
       // Hide labels for pins on the far side of the Moon.
       const facing = p.normal.dot(camDir.copy(camera.position).normalize()) > 0.08;
-      p.lab.style.visibility = facing ? 'visible' : 'hidden';
+      // A neighbour's label would sit on top of the active one (the south pole sites).
+      const crowded = !active && state.site !== null && p.normal.dot(pins[state.site].normal) > 0.97;
+      p.lab.style.visibility = facing && p.g.visible && !crowded ? 'visible' : 'hidden';
     }
     if (controls.update()) loop.invalidate();
     renderer.render(scene, camera);
@@ -258,8 +277,8 @@ export function createGlobe(container, sites) {
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  function frameSite(siteId, animate) {
-    const v = VIEW[siteId];
+  function frameSite(site, animate) {
+    const v = viewFor(site);
     const d1 = latLonToThree(v.lat, v.lon, 1).normalize();
     if (!animate || reduceMotion) {
       camera.position.copy(d1).multiplyScalar(fitDist);
@@ -271,12 +290,17 @@ export function createGlobe(container, sites) {
   }
 
   /**
-   * @param {{siteId, sunDir: THREE.Vector3, earthDir: THREE.Vector3, transition?: boolean}} p
+   * @param {{site: {id, name, lat, lonE}, sunDir: THREE.Vector3, earthDir: THREE.Vector3, transition?: boolean}} p
    */
-  function update({ siteId, sunDir, earthDir, transition }) {
-    if (siteId !== state.site) {
-      frameSite(siteId, state.site !== null);
-      state.site = siteId;
+  function update({ site, sunDir, earthDir, transition }) {
+    const siteKey = `${site.id}|${site.lat}|${site.lonE}`;
+    if (siteKey !== state.siteKey) {
+      const preset = Object.hasOwn(sites, site.id);
+      pins[EXTRA_PIN].g.visible = !preset;
+      if (!preset) placePin(pins[EXTRA_PIN], site);
+      frameSite(site, state.siteKey !== null);
+      state.siteKey = siteKey;
+      state.site = preset ? site.id : EXTRA_PIN;
     }
     if (transition && !reduceMotion) {
       if (!sunAnim) loop.hold();

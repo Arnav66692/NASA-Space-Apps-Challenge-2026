@@ -69,3 +69,21 @@ export function fmtChange(deltaH) {
 }
 
 export const hoursFromStart = (t, start) => (t - start) / HOUR_MS;
+
+/** "Mar 15" or "Mar 15, 2025" (UTC calendar day). */
+export function fmtDay(t, { year = false } = {}) {
+  const d = new Date(t);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}${year ? `, ${d.getUTCFullYear()}` : ''}`;
+}
+
+/** "00:00 UTC" */
+export const fmtClock = (t) => `${fmtUtcTime(t)} UTC`;
+
+const SMALL = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const dayUnit = (n) => (n === 1 ? 'day' : 'days');
+
+/** Headline wording: "nine days", "one day", "21 days". */
+export const slipWords = (n) => `${SMALL[n] ?? n} ${dayUnit(n)}`;
+
+/** Compact wording: "9 days", "1 day". */
+export const slipShort = (n) => `${n} ${dayUnit(n)}`;

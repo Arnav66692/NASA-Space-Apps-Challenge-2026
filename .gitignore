@@ -2,3 +2,6 @@ node_modules
 dist
 *.log
 dist-single
+data/raw
+.DS_Store
+.vercel
