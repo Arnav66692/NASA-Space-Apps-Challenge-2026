@@ -7,8 +7,11 @@ export const BODIES = ['sun', 'earth'];
 const EL_KEY = { sun: 'sunEl', earth: 'earthEl' };
 const AZ_KEY = { sun: 'sunAz', earth: 'earthAz' };
 
-/** Step 1 — an object's centre is above the modelled horizon when elevation > 0. */
-export const isAbove = (el) => el > 0;
+/** Step 1 — an object's centre is above the modelled horizon when elevation > level (0° by default). */
+export const isAbove = (el, level = 0) => el > level;
+
+/** Margins the app offers: the lowest N degrees of sky blocked by terrain. 0 is the smooth horizon. */
+export const HORIZON_MARGINS = [0, 1, 2, 5];
 
 /**
  * Steps 2–3 — above-horizon intervals for one body, with linear interpolation
@@ -16,14 +19,15 @@ export const isAbove = (el) => el > 0;
  * not create a spurious gap.
  * @returns {Array<[number, number]>} [startMs, endMs] pairs
  */
-export function aboveIntervals(rows, body) {
+export function aboveIntervals(rows, body, level = 0) {
   const k = EL_KEY[body];
   const raw = [];
   for (let i = 0; i < rows.length - 1; i++) {
     const { t: t0 } = rows[i];
     const { t: t1 } = rows[i + 1];
-    const e0 = rows[i][k];
-    const e1 = rows[i + 1][k];
+    // Elevations are measured from the blocked line, so the crossing is interpolated against it.
+    const e0 = rows[i][k] - level;
+    const e1 = rows[i + 1][k] - level;
     const a0 = isAbove(e0);
     const a1 = isAbove(e1);
     if (a0 && a1) raw.push([t0, t1]);
@@ -94,9 +98,10 @@ export function analyze(dataset) {
   const { rows } = dataset;
   const start = rows[0].t;
   const end = rows.at(-1).t;
-  const res = { ...dataset, start, end, bodies: {} };
+  const horizonDeg = dataset.horizonDeg ?? 0;
+  const res = { ...dataset, horizonDeg, start, end, bodies: {} };
   for (const body of BODIES) {
-    const intervals = aboveIntervals(rows, body);
+    const intervals = aboveIntervals(rows, body, horizonDeg);
     const hours = sumHours(intervals);
     const totalH = (end - start) / HOUR_MS;
     res.bodies[body] = {

@@ -10,25 +10,91 @@
     />
     <meta name="theme-color" content="#07090c" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23d9d6cf'/%3E%3Cpath d='M16 3a13 13 0 0 1 0 26z' fill='%2307090c'/%3E%3C/svg%3E" />
+    <script>
+      (function () {
+        var d = document.documentElement;
+        var h = location.hash.slice(1);
+        var q = location.search.replace(/^\?/, '').split('&').filter(function (p) { return p && p.indexOf('look=') !== 0; });
+        var tool = ['navigator', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && q.length > 0);
+        d.dataset.page = tool ? 'tool' : 'home';
+        d.classList.add('js');
+        if (!tool && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('intro-on', 'entering');
+      })();
+    </script>
   </head>
   <body>
-    <a class="skip" href="#instrument">Skip to the comparison</a>
+    <a class="skip" href="#navigator">Skip to the navigator</a>
 
-    <header class="topbar">
-      <a class="wordmark" href="#top" aria-label="Long Shadow, home">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12" class="wm-moon" /><path d="M16 4a12 12 0 0 1 0 24z" class="wm-shade" /></svg>
-        Long Shadow
-      </a>
-      <nav aria-label="Sections">
-        <a href="#instrument">Compare</a>
-        <a href="#replay">Replay</a>
-        <a href="#methods">Methods</a>
+    <!-- Opening: the fill rises while the Moon table and the 3D views load. -->
+    <div class="intro" data-intro aria-hidden="true">
+      <div class="intro__layer">
+        <div class="intro__body">
+          <p class="intro__logo">long <em>shadow</em></p>
+          <p class="intro__tag">Sun and Earth above the horizon,<br />at real landing sites on the Moon.</p>
+        </div>
+      </div>
+      <div class="intro__layer intro__layer--fill" data-intro-fill>
+        <div class="intro__body">
+          <p class="intro__logo">long <em>shadow</em></p>
+          <p class="intro__tag">Sun and Earth above the horizon,<br />at real landing sites on the Moon.</p>
+        </div>
+      </div>
+    </div>
+
+    <header class="header">
+      <a class="logo" href="#home" aria-label="Long Shadow, home">long <em>shadow</em></a>
+      <nav class="header__nav" aria-label="Sections">
+        <a class="nav-item" href="#navigator" data-roll>Navigator</a>
+        <a class="nav-item" href="#replay" data-roll>Replay</a>
+        <a class="nav-item" href="#methods" data-roll>Methods</a>
       </nav>
+      <button class="disc disc--menu" type="button" aria-expanded="false" aria-controls="menu" data-menu-toggle>
+        <span class="disc__fill" aria-hidden="true"></span>
+        <span class="disc__dots" aria-hidden="true"><i></i><i></i></span>
+        <span class="disc__x" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" /></svg></span>
+        <span class="sr">Menu</span>
+      </button>
     </header>
 
+    <div class="menu" id="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+      <div class="menu__shade" data-menu-close></div>
+      <div class="menu__panel">
+        <div class="menu__inner">
+          <nav aria-label="Menu">
+            <ol class="menu__list">
+              <li><a class="menu__item" href="#home" data-page-link="home"><sup>01</sup><span class="menu__label" data-chars>Home</span><span class="menu__line" aria-hidden="true"></span></a></li>
+              <li><a class="menu__item" href="#navigator" data-page-link="tool"><sup>02</sup><span class="menu__label" data-chars>Navigator</span><span class="menu__line" aria-hidden="true"></span></a></li>
+              <li><a class="menu__item" href="#replay"><sup>03</sup><span class="menu__label" data-chars>Replay</span><span class="menu__line" aria-hidden="true"></span></a></li>
+              <li><a class="menu__item" href="#methods"><sup>04</sup><span class="menu__label" data-chars>Methods</span><span class="menu__line" aria-hidden="true"></span></a></li>
+            </ol>
+          </nav>
+          <div class="menu__foot">
+            <p class="menu__contact">
+              <a href="https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/" target="_blank" rel="noopener">Lunar Landing Site Navigator</a>
+              <span>NASA Space Apps Challenge 2026</span>
+            </p>
+            <ul class="menu__social">
+              <li><a href="https://github.com/agastyasingh395/NASA-Space-Apps-Challenge-2026" target="_blank" rel="noopener">GitHub</a></li>
+              <li><a href="https://ssd.jpl.nasa.gov/horizons/" target="_blank" rel="noopener">JPL Horizons</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <main id="top">
+      <!-- ───────────── Home: one screen over the Moon ───────────── -->
+      <section class="home" id="home" aria-labelledby="home-title">
+        <h2 class="home__title" id="home-title">
+          <span class="home__caps"><span>Lunar landing site navigator, NASA Space Apps 2026</span></span>
+          <span class="home__l1"><span>Touchdown slips,</span></span>
+          <span class="home__l2"><span>the sky moves on</span></span>
+        </h2>
+        <div class="home__cta"><a class="btn btn--white" href="#navigator" data-pill>Open the navigator</a></div>
+      </section>
+
       <!-- ───────────── Hero: question, answer, controls ───────────── -->
-      <section class="hero" aria-labelledby="q">
+      <section class="hero" id="navigator" aria-labelledby="q">
         <div class="hero-copy">
           <p class="eyebrow">NASA Space Apps 2026 · Lunar Landing Site Navigator</p>
           <h1 id="q">What changes in the first 72&nbsp;hours on the Moon if touchdown slips <em id="slip-words">nine days</em>?</h1>
@@ -86,6 +152,13 @@
                   <input type="range" id="slip-range" min="1" max="30" step="1" value="9" disabled />
                 </label>
               </div>
+              <div class="plan-margin">
+                <span class="plan-k" id="margin-k">Terrain margin</span>
+                <div class="margin-row">
+                  <div class="seg" role="radiogroup" aria-labelledby="margin-k" aria-describedby="margin-help" id="margin-picker"></div>
+                  <p class="margin-help" id="margin-help">Treat the lowest few degrees of sky as blocked by ridges and crater rims. Every number below reruns.</p>
+                </div>
+              </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
                 <button type="button" class="link-btn" id="plan-reset" hidden>Reset to Mar 15, 2025 and 9 days</button>
@@ -135,6 +208,7 @@
           <figcaption id="globe-cap">
             <span class="lg"><i class="sw sw-term"></i>Sunrise / sunset line</span>
             <span class="lg"><i class="sw sw-limb"></i>Earth on the horizon</span>
+            <div class="seg look-switch" role="radiogroup" aria-label="Look of the 3D views" data-look-switch></div>
             <span class="lg-note">Drag to rotate. Lighting from JPL Sun direction at the selected instant.</span>
           </figcaption>
         </figure>
@@ -156,6 +230,7 @@
           <h3 id="sky-h" class="sr">Sky at the selected instant</h3>
           <figure class="surface-wrap">
             <div class="surface" id="surface" role="img" aria-label="3D view of the landing site"></div>
+            <div class="seg look-switch" role="radiogroup" aria-label="Look of the 3D views" data-look-switch data-look-surface></div>
             <div class="surface-hud">
               <span class="hud-site" id="surf-site"></span>
               <span class="hud-t num" id="surf-t"></span>
@@ -216,10 +291,7 @@
             scenario at the Blue Ghost site and watch the modeled Sun cross the smooth horizon on March 16.
           </p>
           <div class="rp-actions">
-            <button class="btn-primary" id="replay-btn" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z" /></svg>
-              Replay the sunset
-            </button>
+            <button class="btn btn--white" id="replay-btn" type="button" data-pill>Replay the sunset</button>
             <div class="stepper" role="group" aria-label="Step through the sunset">
               <button type="button" id="step-back" aria-label="Back one hour">−1 h</button>
               <button type="button" id="step-sunset">Jump to sunset</button>
@@ -237,10 +309,7 @@
               shadow longer than the whole Moon stays fully covered, so we say covers, not matches.
               <a href="https://svs.gsfc.nasa.gov/5471" target="_blank" rel="noopener">NASA SVS: eclipse times ↗</a>
             </p>
-            <button class="btn-ghost" id="eclipse-btn" type="button" disabled>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z" /></svg>
-              Replay the eclipse
-            </button>
+            <button class="btn btn--ghost" id="eclipse-btn" type="button" data-pill disabled>Replay the eclipse</button>
           </div>
         </div>
 
@@ -280,6 +349,9 @@
               On polar terrain, nearby ridges can materially change both windows. When Earth fully covers the Sun
               (a lunar eclipse seen from the surface), that time is counted as no sunlight. Partial cover is marked
               on the timeline and still counted as sunlight.
+              The terrain margin raises the line that counts as the horizon to 1, 2 or 5 degrees, as a
+              stand-in for ridges and crater rims. It is the same in every direction around the site, so it
+              is a what-if, not a measured horizon.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
             </p>
           </div>
@@ -329,10 +401,17 @@
           <div>
             <h3>3D views</h3>
             <p>
-              Original procedural renderings, not imagery. The globe converts each site's local Sun and Earth
-              directions to Moon-fixed vectors to draw the sunrise/sunset line and the Earth-horizon line (Earth
-              parallax across the Moon, ≤0.3°, is ignored in the globe only). The surface view places the Sun and
-              Earth by azimuth and elevation. The lander is a generic model. Sizes and terrain bumps are illustrative.
+              The globe is the real Moon. Its surface is NASA's LRO Camera colour mosaic, and its relief comes
+              from LOLA laser altimeter elevation, both from the
+              <a href="https://svs.gsfc.nasa.gov/4720/" target="_blank" rel="noopener">CGI Moon Kit by NASA's Scientific Visualization Studio ↗</a>.
+              Relief is drawn about three times steeper than it is, so it reads at this scale. The globe converts
+              each site's local Sun and Earth directions to Moon-fixed vectors to light the surface and to draw the
+              sunrise/sunset line and the Earth-horizon line (Earth parallax across the Moon, ≤0.3°, is ignored in
+              the globe only). The opening screen is the same globe seen from its night side, exposed brighter.
+            </p>
+            <p>
+              The surface view is an original procedural rendering, not imagery. It places the Sun and Earth by
+              azimuth and elevation. The lander is a generic model. Sizes and terrain bumps are illustrative.
             </p>
           </div>
           <div>
@@ -349,10 +428,21 @@
         <a href="https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/" target="_blank" rel="noopener">Lunar Landing Site Navigator ↗</a>
       </p>
       <p class="muted">
-        Hypothetical touchdowns at real landing sites. Ephemerides: NASA/JPL Horizons. Built with AI assistance;
+        Hypothetical touchdowns at real landing sites. Ephemerides: NASA/JPL Horizons. Moon maps: NASA's
+        Scientific Visualization Studio. Built with AI assistance;
         see the project page for the team's disclosure.
       </p>
     </footer>
+
+    <div class="corner corner--bl"><a class="btn btn--ghost" href="#replay" data-pill>Replay Blue Ghost</a></div>
+    <a class="corner corner--bc orbit" href="#methods">
+      <span class="orbit__w orbit__w--a" aria-hidden="true"><span>Methods</span></span>
+      <span class="disc" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2" /><path d="M16 5a11 11 0 0 1 0 22z" fill="currentColor" /></svg></span>
+      <span class="orbit__w orbit__w--b" aria-hidden="true"><span>and sources</span></span>
+      <span class="sr">Methods and sources</span>
+    </a>
+    <p class="corner corner--br">Team Red K, 2026</p>
+    <div class="cursor" aria-hidden="true"><div class="cursor__inner"><div class="cursor__ring"></div></div></div>
 
     <div class="sr" aria-live="polite" id="live"></div>
     <script type="module" src="/src/main.js"></script>

@@ -34,7 +34,7 @@ export function createSkyStrip(root) {
   function fitDomain(a) {
     let [lo, hi] = a.elRange;
     lo = Math.min(lo, 0);
-    hi = Math.max(hi, 0);
+    hi = Math.max(hi, a.horizonDeg ?? 0, 0);
     const span = Math.max(hi - lo, 4);
     const pad = span * 0.12;
     const step = niceStep(span + 2 * pad);
@@ -111,6 +111,15 @@ export function createSkyStrip(root) {
     const bl = el('text', { x: M.l + 5, y: y(0) + 14, class: 'below-label' }, svg);
     bl.textContent = 'below';
 
+    // Terrain margin: the sky between the horizon and the blocked line counts as hidden.
+    const margin = a.horizonDeg ?? 0;
+    if (margin > 0) {
+      el('rect', { x: M.l, y: y(margin), width: W - M.l - M.r, height: Math.max(0, y(0) - y(margin)), class: 'blocked' }, svg);
+      el('line', { x1: M.l, x2: W - M.r, y1: y(margin), y2: y(margin), class: 'blocked-line' }, svg);
+      const ml = el('text', { x: W - M.r - 5, y: y(margin) - 6, class: 'blocked-label' }, svg);
+      ml.textContent = `Blocked below ${margin}°`;
+    }
+
     // Full-window paths
     const trails = el('g', {}, svg);
     trail(a.rows, 'sun', 'sun', trails);
@@ -140,7 +149,7 @@ export function createSkyStrip(root) {
       m.label.setAttribute('x', flip ? -13 : 13);
       m.label.setAttribute('text-anchor', flip ? 'end' : 'start');
       m.label.textContent = `${body === 'sun' ? 'Sun' : 'Earth'} ${fmtDeg(e)}${offLow || offHigh ? ' (off scale)' : ''}`;
-      m.g.classList.toggle('below', e <= 0);
+      m.g.classList.toggle('below', e <= (analysis.horizonDeg ?? 0));
     }
     // Keep labels from colliding when bodies are close (Athena).
     const sy = y(Math.min(Math.max(sample.sun.el, dom[0]), dom[1]));

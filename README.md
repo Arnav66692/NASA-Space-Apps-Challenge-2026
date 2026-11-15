@@ -40,6 +40,7 @@ The live site is a Vercel project named `long-shadow-moon`. It is not connected 
 | Hero | The question, the computed answer for the selected site, the site picker, both touchdown dates, **Apply +9 days**, and the three-metric comparison |
 | Change the plan | More landing sites, custom coordinates, a touchdown date and time in UTC, and a slip slider from 1 to 30 days. Every view below follows. **Copy link** shares the exact view |
 | Slip strip | One cell per day of delay, 0 to 30, each with Sun, Earth and both hours on the same 72 h scale. The slips with the most and the fewest hours with both up are marked. Click a cell to set the slip |
+| Terrain margin | A setting that treats the lowest 0, 1, 2 or 5 degrees of sky as blocked, as a stand-in for ridges and crater rims. Every number reruns against the raised line: the answer, the table, the timelines, the slip strip and the horizon strip. It is the same in every direction, so it is a what-if, not a measured horizon |
 | Eclipse flag | When Earth passes in front of the Sun (a lunar eclipse seen from the surface), the timeline marks it and the time the Sun is fully covered is counted as no sunlight |
 | 3D globe | Moon lit by the JPL Sun direction at the selected instant. The gold line is sunrise/sunset and the dashed blue line is where Earth sits on the horizon. Applying the delay sweeps the terminator across the Moon |
 | Timelines | Sun / Earth / Both above-horizon bars for both scenarios on one 0–72 h axis, with a shared cursor and labeled crossings. Click or drag to scrub |
@@ -78,6 +79,12 @@ src/ephemeris.js  loads the bundled table in the browser
 src/eclipse.js    when Earth covers the Sun at a site, fully or partly
 src/slips.js      the same 72 h analysis for every slip from 0 to 30 days, and the ranking
 src/slipstrip.js  the slip strip view
+src/unseen.css    the look: loads after styles.css and restyles it
+src/chrome.js     header, menu, cursor ring, the opening, and the switch between home and the navigator
+src/fonts/        Inter and Newsreader (SIL OFL 1.1), licences included
+src/three/moonmaps.js  loads the real Moon textures for the globe
+src/three/moon/   colour and relief textures built from NASA's CGI Moon Kit
+tools/build_moon_maps.py  rebuilds those textures
 src/format.js     all display rounding (after calculation)
 src/timeline.js   availability bars + shared cursor
 src/skystrip.js   2D horizon strip (SVG)
@@ -89,7 +96,7 @@ docs/HANDOFF.md   the original build brief
 
 ## Verification
 
-`npm test` runs 41 tests, and all pass. The first 16 cover the four presets. They reproduce the brief's full-precision totals for all four presets (Blue Ghost Sun 44.177521847 h; Athena Earth 66.497844255 → 17.750254565 h, a 48.747589690 h loss). They also cover every crossing (Blue Ghost sunset 20:10:39, Athena Earthset 18:29:52, Athena Earthrise 06:14:59), the 54 h 15 min → 53 h 15 min countdown, the zero-sample merge, and azimuth wrap across north.
+`npm test` runs 47 tests, and all pass. The first 16 cover the four presets. They reproduce the brief's full-precision totals for all four presets (Blue Ghost Sun 44.177521847 h; Athena Earth 66.497844255 → 17.750254565 h, a 48.747589690 h loss). They also cover every crossing (Blue Ghost sunset 20:10:39, Athena Earthset 18:29:52, Athena Earthrise 06:14:59), the 54 h 15 min → 53 h 15 min countdown, the zero-sample merge, and azimuth wrap across north.
 
 The other 12 cover the any-site engine:
 
@@ -97,10 +104,11 @@ The other 12 cover the any-site engine:
 - **The four preset files.** The table reproduces all 584 Sun and Earth directions within 0.006 degrees, the same hour totals within 0.02 h, and the same crossings within 2 minutes.
 - Stays outside 2024 to 2030 and bad coordinates are rejected. Far-side sites never see Earth.
 
-The last 13 cover the eclipse flag and the slip strip. Both bars were set before the first run.
+The next 13 cover the eclipse flag and the slip strip, and the last 6 cover the terrain margin. Both bars were set before the first run.
 
 - **Eclipse of Mar 14, 2025 at the Blue Ghost site.** The bar was 2 minutes from an earlier pilot result, 06:18 to 08:34 UTC. The model gives 06:18:09 to 08:35:15 UTC, so both edges pass. The window covers the reported whole-Moon totality, 06:26 to 07:31 UTC. It is about twice as long, because one site stays in Earth's shadow longer than the whole Moon stays fully covered.
 - Sunlit hours drop by the eclipse length and nothing else changes. The four preset stays show no eclipse and keep their numbers. A far-side site is not flagged.
+- **Terrain margin** (`tests/margin.test.js`, 6 tests, bars set before the first run). Margin 0 gives exactly the earlier totals and crossings. Crossings against the raised line agree with an independent search in `moonsky.js` (bisected to the second on 10 minute samples) within 2 minutes. The first run found only 3 crossings to compare, so the sample was widened to every day for a month at seven sites. 152 crossings now agree, worst gap 3 seconds. Raising the margin never adds hours.
 - **Slip strip.** The bar was 0.2 h. The cells for slip 0 and slip 9 match the four preset files at Athena and Blue Ghost. The strip stops at the end of the table.
 
 Browser checks done during the build:
@@ -117,6 +125,22 @@ Not yet done:
 - Partial cover of the Sun is marked but still counted as full sunlight.
 - The slip strip and eclipse flag were checked in the production build at desktop width and at 375 px. They have not been checked on a real phone.
 - Real terrain. Near the poles a ridge can hide the Sun or Earth while this model shows it up.
+
+## Design
+
+The look follows [unseen.co](https://unseen.co): a one-screen home over a live 3D scene, a transparent header with rolling nav letters, white pills and discs, a menu panel from the right, a cursor ring, and a dark long-scroll page for the tool. Layout, type scale and motion were matched to measurements of that site. All code here is original, and none of unseen's code, fonts, images or copy is used. Inter and Newsreader stand in for its two typefaces. The two small icons (arrow and close) are from Phosphor Icons (MIT).
+
+The globe is the real Moon. Its colour is NASA's LRO Camera mosaic and its relief is made from LOLA laser altimeter elevation, both from the [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/) by NASA's Scientific Visualization Studio. `tools/build_moon_maps.py` builds the two textures in `src/three/moon/` from the kit's files. Relief is drawn about three times steeper than it is. Sunlight on the globe is added in the shader from the JPL Sun direction, and ground past the day and night line stays dark whatever its slope.
+
+The globe is shaded the way the real Moon reflects light (Lommel-Seeliger blended with plain matte shading), which keeps a full Moon bright to its edge. Its silhouette carries real mountains from the LOLA heights, drawn three times taller, and the night side gets earthshine that follows Earth's phase as seen from the Moon.
+
+A Real or Studio switch beside the globe and the lander view changes the look of both. Real aims for a photograph. Studio is a pale pearl Moon with a soft wrapped light and a pastel rim, a plaster-white lander with gold accents, and clay-coloured ground, in the site's unseen style. The data, the Sun and Earth positions and the camera are the same in both. `?look=studio` opens it directly.
+
+The home screen is the same globe seen from its night side, so the sunlit part is a crescent across the top. It is exposed brighter than the navigator's globe and has a soft fill light so the night side is not pure black.
+
+Check done: with Blue Ghost selected on Mar 6, 2025, the pin sits on Mare Crisium and the east half of the near side is lit, which matches a first quarter Moon.
+
+Not done in this pass: sound and a film grain pass. The surface view is still procedural. The look was checked in Chrome at 1440, 1920, 1024 and 390 wide, with reduced motion, and with a shared link. It has not been checked in Safari or Firefox, or on a real phone.
 
 ## Credits
 

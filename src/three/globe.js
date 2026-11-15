@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { moonTextures, glowTexture, starfield } from './textures.js';
 import { latLonToThree, slerpVec, easeInOut, renderLoop } from './geo.js';
+import { loadMoonMaps } from './moonmaps.js';
 
 const VIEW = {
   athena: { lat: -50, lon: 20 },
@@ -16,12 +17,37 @@ const VIEW = {
 const viewFor = (site) =>
   VIEW[site.id] ?? { lat: THREE.MathUtils.clamp(site.lat * 0.62, -52, 52), lon: site.lonE - 9 };
 const EXTRA_PIN = '__extra';
+// Home screen: the Moon seen from its night side, so the sunlit part is a crescent across the
+// top of the window and the headline sits over the dark disc. The Sun direction is the real one.
+const HOME = {
+  widthShare: 0.62, // Moon radius as a share of the window width
+  heightShare: 0.78, // or of the height, whichever is larger (tall phone screens)
+  limbAt: 0.075, // the top of the Moon sits this far down the window
+  phaseDeg: 137, // angle Sun, Moon, camera. Larger is a thinner crescent
+  sunBoost: 1.55, // the crescent is exposed a little brighter than the navigator's globe
+  ambient: 0.1, // soft light on the home screen so the night side is not pure black
+  lookYaw: 3.2, // degrees the pointer turns the view
+  lookPitch: 1.5,
+  driftYaw: 1.6, // degrees of slow drift, so the scene is never still
+  driftPitch: 0.8,
+  driftMs: 48000,
+};
+// How strongly the relief map bends the light. The map already holds slopes times four.
+const RELIEF_SCALE = 0.75;
+// Two looks. 'real' aims for a photograph: lunar reflectance, real mountains on the silhouette,
+// earthshine on the night side. 'studio' is a soft pearl Moon in the site's unseen style.
+const LOOKS = {
+  real: { lunar: 0.8, studio: 0, relief: RELIEF_SCALE, exaggeration: 3, earthshine: 0.35, ambient: 0.035 },
+  studio: { lunar: 0, studio: 1, relief: 0.3, exaggeration: 1.2, earthshine: 0.18, ambient: 0.16 },
+};
+const SUN_LIGHT = { color: 0xfff4e2, intensity: 3.2 };
+const AMBIENT = 0.035;
 
 function greatCircle(color, dashed) {
   const pts = [];
   for (let i = 0; i <= 256; i++) {
     const a = (i / 256) * Math.PI * 2;
-    pts.push(new THREE.Vector3(Math.cos(a), Math.sin(a), 0).multiplyScalar(1.006));
+    pts.push(new THREE.Vector3(Math.cos(a), Math.sin(a), 0).multiplyScalar(1.022));
   }
   const g = new THREE.BufferGeometry().setFromPoints(pts);
   const m = dashed
@@ -80,7 +106,7 @@ const pathVertex = `
   vec3 arc(float t) {
     float s = sin(uOmega);
     vec3 p = (sin((1.0 - t) * uOmega) * uA + sin(t * uOmega) * uB) / s;
-    return normalize(p) * (1.003 + uLift * sin(3.14159265 * t));
+    return normalize(p) * (1.022 + uLift * sin(3.14159265 * t));
   }
   void main() {
     float t = uHead > 0.5 ? uProgress : (aIndex + uPhase) / uCount;
@@ -253,22 +279,81 @@ export function createGlobe(container, sites) {
   // Moon
   const { map, bumpMap } = moonTextures();
   const moon = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 160, 120),
+    new THREE.SphereGeometry(1, 512, 256),
     new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.9, roughness: 1, metalness: 0 }),
   );
+  // Sunlight on the Moon is added here and not by a scene light. The relief map tilts the surface,
+  // and a tilted slope past the day and night line would otherwise catch light it cannot see.
+  const sunUniforms = {
+    uLunar: { value: LOOKS.real.lunar },
+    uStudio: { value: 0 },
+    uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+    uSunColor: { value: new THREE.Color(SUN_LIGHT.color).multiplyScalar(SUN_LIGHT.intensity) },
+  };
+  moon.material.dithering = true; // no visible steps in the dark side's slow falloff
+  moon.material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, sunUniforms);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform float uLunar;\nuniform float uStudio;')
+      .replace(
+        '#include <lights_fragment_end>',
+        `#include <lights_fragment_end>
+        {
+          vec3 sunView = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
+          // Ground that faces away from the Sun is in the Moon's own shadow, whatever its slope.
+          float open = smoothstep(-0.015, 0.11, dot(nonPerturbedNormal, sunView));
+          float cosI = max(dot(normal, sunView), 0.0);
+          float cosE = max(dot(normal, geometryViewDir), 0.02);
+          // The Moon is not a matte ball. Its dust scatters light so a full Moon stays bright to the edge
+          // (Lommel-Seeliger), blended with plain matte shading as real lunar photometry does.
+          float lunar = mix(cosI, 2.0 * cosI / (cosI + cosE), uLunar);
+          vec3 realLight = uSunColor * BRDF_Lambert(material.diffuseColor) * lunar * open;
+          // Studio: a pale pearl Moon, soft wrapped light and an iridescent rim.
+          float lum = dot(material.diffuseColor, vec3(0.299, 0.587, 0.114));
+          vec3 pearl = lum * vec3(1.0, 0.975, 0.96) * 1.35 + vec3(0.14, 0.13, 0.135);
+          float wrapLit = pow(clamp((dot(normal, sunView) + 0.35) / 1.35, 0.0, 1.0), 1.6);
+          float fres = pow(1.0 - cosE, 2.6);
+          // Pearl rim: blush pink into lilac into peach, the site's pastels, never green.
+          vec3 iri = mix(mix(vec3(1.0, 0.8, 0.88), vec3(0.8, 0.76, 1.0), smoothstep(0.15, 0.55, fres)), vec3(1.0, 0.86, 0.74), smoothstep(0.55, 0.95, fres));
+          vec3 studioLight = uSunColor * BRDF_Lambert(pearl) * wrapLit * 1.15 + iri * fres * 0.22 * (0.35 + 0.65 * wrapLit);
+          reflectedLight.directDiffuse += mix(realLight, studioLight, uStudio);
+        }`,
+      );
+  };
   scene.add(moon);
+  // The drawn texture above is only a fallback. The Moon stays hidden until NASA's maps load.
+  moon.visible = false;
+  loadMoonMaps(renderer)
+    .then((maps) => {
+      const { map: realMap, normalMap } = maps;
+      const m = moon.material;
+      m.map = realMap;
+      m.bumpMap = null;
+      m.normalMap = normalMap;
+      m.normalScale.set(RELIEF_SCALE, RELIEF_SCALE);
+      m.displacementMap = maps.heightMap;
+      heightRange = maps.heightRange;
+      applyLook();
+      m.needsUpdate = true;
+    })
+    .catch((err) => console.error('NASA Moon maps unavailable, using the drawn texture', err))
+    .finally(() => {
+      moon.visible = true;
+      document.body.classList.add('moon-ready');
+      loop.invalidate();
+    });
 
   // Graticule
   const grat = new THREE.Group();
   const gm = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07 });
   for (let lat = -60; lat <= 60; lat += 30) {
     const pts = [];
-    for (let lon = -180; lon <= 180; lon += 3) pts.push(latLonToThree(lat, lon, 1.003));
+    for (let lon = -180; lon <= 180; lon += 3) pts.push(latLonToThree(lat, lon, 1.021));
     grat.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gm));
   }
   for (let lon = -180; lon < 180; lon += 30) {
     const pts = [];
-    for (let lat = -90; lat <= 90; lat += 3) pts.push(latLonToThree(lat, lon, 1.003));
+    for (let lat = -90; lat <= 90; lat += 3) pts.push(latLonToThree(lat, lon, 1.021));
     grat.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gm));
   }
   scene.add(grat);
@@ -279,10 +364,11 @@ export function createGlobe(container, sites) {
   scene.add(term, limb);
 
   // Lights
-  const sun = new THREE.DirectionalLight(0xfff4e2, 3.2);
+  const sun = new THREE.DirectionalLight(SUN_LIGHT.color, 0); // position only, see sunUniforms
   const earthshine = new THREE.DirectionalLight(0x9cc4ff, 0.08);
   scene.add(sun, sun.target, earthshine, earthshine.target);
-  scene.add(new THREE.AmbientLight(0x8899aa, 0.035));
+  const ambient = new THREE.AmbientLight(0x8899aa, AMBIENT);
+  scene.add(ambient);
 
   // Sun glow (far away along the sun direction)
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -304,6 +390,8 @@ export function createGlobe(container, sites) {
 
   // Site pins
   const pins = {};
+  const pinGroup = new THREE.Group();
+  scene.add(pinGroup);
   const UP = new THREE.Vector3(0, 1, 0);
   function placePin(pin, s) {
     const n = latLonToThree(s.lat, s.lonE, 1);
@@ -332,7 +420,7 @@ export function createGlobe(container, sites) {
     const lo = new CSS2DObject(lab);
     lo.position.set(0, 0.12, 0);
     g.add(lo);
-    scene.add(g);
+    pinGroup.add(g);
     const pin = { g, ring, lab, normal: new THREE.Vector3() };
     placePin(pin, s);
     return pin;
@@ -363,12 +451,16 @@ export function createGlobe(container, sites) {
   function applyDirs() {
     const s = state.sunDir, e = state.earthDir;
     sun.position.copy(s).multiplyScalar(10);
+    sunUniforms.uSunDir.value.copy(s);
     sunSprite.position.copy(s).multiplyScalar(30);
     earthshine.position.copy(e).multiplyScalar(10);
+    // Earth seen from the Moon is full when it sits opposite the Sun, so earthshine is brightest then.
+    earthshine.intensity = LOOKS[look].earthshine * (1 - Math.cos(s.angleTo(e))) / 2;
     earth.position.copy(e).multiplyScalar(3.1);
     earthMat.uniforms.uSun.value.copy(s);
     term.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), s);
     limb.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), e);
+    if (mode === 'home') setHomeBasis();
   }
 
   function resize() {
@@ -385,12 +477,27 @@ export function createGlobe(container, sites) {
     const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
     fitDist = 1.12 / Math.sin(Math.min(vHalf, hHalf));
+    if (mode === 'home') {
+      // Zoom in and slide the view down, so only the top of the Moon shows. The canvas stays
+      // the size of the window, so the horizon is drawn at full resolution.
+      const radiusPx = ((h / 2) * Math.tan(Math.asin(1 / fitDist))) / Math.tan(vHalf);
+      const target = Math.max(HOME.widthShare * w, HOME.heightShare * h);
+      camera.zoom = target / radiusPx;
+      camera.setViewOffset(w, h, 0, -(HOME.limbAt * h + target - h / 2), w, h);
+    } else {
+      camera.zoom = 1;
+      camera.clearViewOffset();
+    }
+    camera.updateProjectionMatrix();
     travel.setPxPerUnit(renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan(vHalf)));
     controls.maxDistance = fitDist * 1.8;
     if (!camAnim && state.site) camera.position.setLength(fitDist);
     loop.invalidate();
   }
   let fitDist = 3.6;
+  let mode = 'site';
+  let look = 'real';
+  let heightRange = null;
   const camDir = new THREE.Vector3();
 
   const loop = renderLoop(container, (now) => {
@@ -428,7 +535,8 @@ export function createGlobe(container, sites) {
       const crowded = !active && state.site !== null && p.normal.dot(pins[state.site].normal) > 0.97;
       p.lab.style.visibility = facing && p.g.visible && !crowded ? 'visible' : 'hidden';
     }
-    if (controls.update()) loop.invalidate();
+    if (mode === 'home') aimHome(now);
+    else if (controls.update()) loop.invalidate();
     renderer.render(scene, camera);
     labels.render(scene, camera);
   });
@@ -464,7 +572,8 @@ export function createGlobe(container, sites) {
       state.siteDir = to;
       pins[EXTRA_PIN].g.visible = !preset;
       if (!preset) placePin(pins[EXTRA_PIN], site);
-      frameSite(site, state.siteKey !== null);
+      state.siteObj = site;
+      if (mode === 'site') frameSite(site, state.siteKey !== null);
       state.siteKey = siteKey;
       state.site = preset ? site.id : EXTRA_PIN;
     }
@@ -483,6 +592,84 @@ export function createGlobe(container, sites) {
     loop.invalidate();
   }
 
+  // Home view: where the camera sits and which way is up, from the Sun direction.
+  const homeView = { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0), right: new THREE.Vector3(), px: 0, py: 0, tx: 0, ty: 0 };
+  const aim = new THREE.Vector3();
+  function setHomeBasis() {
+    const s = state.sunDir;
+    const side = new THREE.Vector3().crossVectors(UP, s);
+    if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+    side.normalize();
+    const phase = THREE.MathUtils.degToRad(HOME.phaseDeg);
+    homeView.dir.copy(s).multiplyScalar(Math.cos(phase)).addScaledVector(side, Math.sin(phase)).normalize();
+    // Up points at the Sun, so the lit crescent runs across the top.
+    homeView.up.copy(s).addScaledVector(homeView.dir, -s.dot(homeView.dir)).normalize();
+    homeView.right.crossVectors(homeView.up, homeView.dir).normalize();
+  }
+  function aimHome(now) {
+    homeView.px += (homeView.tx - homeView.px) * 0.045;
+    homeView.py += (homeView.ty - homeView.py) * 0.045;
+    const swing = reduceMotion ? 0 : (now / HOME.driftMs) * Math.PI * 2;
+    const yaw = THREE.MathUtils.degToRad(HOME.lookYaw * homeView.px + HOME.driftYaw * Math.sin(swing));
+    const pitch = THREE.MathUtils.degToRad(HOME.lookPitch * homeView.py + HOME.driftPitch * Math.sin(swing * 0.73 + 1.1));
+    aim.copy(homeView.dir).addScaledVector(homeView.right, Math.tan(yaw)).addScaledVector(homeView.up, Math.tan(pitch)).normalize();
+    camera.position.copy(aim).multiplyScalar(fitDist);
+    camera.up.copy(homeView.up);
+    camera.lookAt(0, 0, 0);
+  }
+
+  /** 'home' turns the globe into the opening crescent. 'site' is the navigator's whole-Moon view. */
+  function setMode(next) {
+    if (next === mode) return;
+    mode = next;
+    if (camAnim) {
+      camAnim = null;
+      loop.release();
+    }
+    const isHome = mode === 'home';
+    controls.enabled = !isHome;
+    ambient.intensity = isHome ? HOME.ambient : LOOKS[look].ambient;
+    sunUniforms.uSunColor.value.set(SUN_LIGHT.color).multiplyScalar(SUN_LIGHT.intensity * (isHome ? HOME.sunBoost : 1));
+    for (const overlay of [grat, term, limb, earth, pinGroup]) overlay.visible = !isHome;
+    resize();
+    if (isHome) {
+      setHomeBasis();
+      aimHome(performance.now());
+    } else {
+      camera.up.set(0, 1, 0);
+      if (state.siteObj) frameSite(state.siteObj, false);
+    }
+    loop.invalidate();
+  }
+
+  /** Switch between the photographic Moon and the studio pearl. */
+  function applyLook() {
+    const L = LOOKS[look];
+    sunUniforms.uLunar.value = L.lunar;
+    sunUniforms.uStudio.value = L.studio;
+    const m = moon.material;
+    if (m.normalMap) m.normalScale.set(L.relief, L.relief);
+    if (m.displacementMap && heightRange) {
+      const k = L.exaggeration / heightRange.radiusM;
+      m.displacementScale = (heightRange.maxM - heightRange.minM) * k;
+      m.displacementBias = heightRange.minM * k;
+    }
+    if (mode !== 'home') ambient.intensity = L.ambient;
+    applyDirs();
+    loop.invalidate();
+  }
+  function setLook(next) {
+    if (!LOOKS[next] || next === look) return;
+    look = next;
+    applyLook();
+  }
+
+  /** Pointer position across the window, each axis from -1 to 1. Turns the home view a little. */
+  function setPointer(x, y) {
+    homeView.tx = x;
+    homeView.ty = -y;
+  }
+
   resize();
-  return { update };
+  return { update, setMode, setPointer, setLook };
 }

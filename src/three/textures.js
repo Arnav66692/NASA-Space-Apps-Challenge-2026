@@ -13,7 +13,7 @@ export function rng(seed = 1) {
 }
 
 // 3D value noise
-function makeNoise3(seed) {
+export function makeNoise3(seed) {
   const r = rng(seed);
   const perm = new Uint8Array(512);
   const vals = new Float32Array(256);
