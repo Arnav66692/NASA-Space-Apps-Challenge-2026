@@ -1,0 +1,258 @@
+/* Additions on top of unseen.css: the backup finder, unbroken stretches, easier timelines,
+   loading placeholders for the 3D views, and the phone order. Kept in one file so it merges cleanly.
+   Written with an AI tool (Claude). */
+
+/* ───────────── Touchdown picker ─────────────
+   Replaces the browser's date-time pop-up. Same parts as the rest of the page: hairlines on near-black,
+   pill buttons, a white pill for the choice, the serif italic for the month, UTC throughout. */
+.plan-date { position: relative; }
+.dp { position: relative; text-transform: none; letter-spacing: 0; }
+.dp-trigger {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 1rem;
+  min-height: 2.9rem; padding: 0.55rem 1rem 0.55rem 1.2rem; border: 0; border-radius: 1.5rem;
+  background: transparent; color: var(--night-ink); box-shadow: inset 0 0 0 1px var(--night-line-2);
+  font-family: var(--sans); font-size: 0.95rem; cursor: pointer; white-space: nowrap;
+  transition: box-shadow 0.3s;
+}
+.dp-trigger:hover:not(:disabled), .dp.is-open .dp-trigger { box-shadow: inset 0 0 0 1px var(--night-ink); }
+.dp-trigger:disabled { opacity: 0.55; cursor: progress; }
+.dp-trigger svg, .dp-arrow svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.dp-trigger svg { color: var(--night-3); }
+
+.dp-pop {
+  position: absolute; left: 0; top: calc(100% + 0.6rem); z-index: 40;
+  width: min(23rem, calc(100vw - 2rem)); padding: 1.2rem 1.2rem 1.1rem;
+  background: var(--night); color: var(--night-ink);
+  border-radius: 1.2rem; box-shadow: inset 0 0 0 1px var(--night-line-2), 0 1.5rem 3rem rgb(0 0 0 / 0.6);
+  display: grid; gap: 0.9rem;
+  animation: dp-in 0.35s var(--expo-out);
+}
+.dp-pop[hidden] { display: none; }
+@keyframes dp-in { from { opacity: 0; transform: translateY(-0.4rem); } }
+@media (prefers-reduced-motion: reduce) { .dp-pop { animation: none; } }
+
+.dp-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.dp-month { margin: 0; font-size: 1.15rem; letter-spacing: -0.01em; color: var(--night-3); }
+.dp-month em { font-family: var(--serif); font-style: italic; font-weight: 360; font-size: 1.7rem; color: var(--night-ink); margin-right: 0.2rem; }
+.dp-nav { display: flex; gap: 0.4rem; }
+.dp-arrow {
+  display: grid; place-items: center; width: 2.3rem; height: 2.3rem; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--night-ink); box-shadow: inset 0 0 0 1px var(--night-line-2); cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+}
+.dp-arrow:hover:not(:disabled) { background: var(--night-ink); color: var(--night); }
+.dp-arrow:disabled { opacity: 0.3; cursor: default; }
+.dp-next svg { transform: scaleX(-1); }
+
+/* Year pills: the table covers 2024 to 2030, so a whole year is one tap away. */
+.dp-years { display: flex; flex-wrap: wrap; gap: 0.25rem; padding: 0.3rem; border-radius: 1.875rem; background: var(--bar); }
+.dp-years button {
+  flex: 1 1 0; min-width: 0; padding: 0.4rem 0; border: 0; border-radius: 180px; background: transparent;
+  color: var(--night-3); font-family: var(--sans); font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+}
+.dp-years button:hover { background: #2a2a2a; color: var(--night-ink); }
+.dp-years button[aria-pressed="true"] { background: var(--night-ink); color: var(--night); }
+
+.dp-week, .dp-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dp-week span { text-align: center; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--night-2); padding-bottom: 0.2rem; }
+.dp-days { row-gap: 0.15rem; }
+.dp-day {
+  position: relative; display: grid; place-items: center; aspect-ratio: 1; max-height: 2.6rem; width: 100%;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--night-ink);
+  font-family: var(--sans); font-size: 0.92rem; cursor: pointer; transition: background-color 0.25s, color 0.25s;
+}
+.dp-day:hover:not(:disabled):not(.is-on) { background: #2a2a2a; }
+.dp-day:disabled { color: rgb(241 237 235 / 0.22); cursor: default; }
+.dp-day.is-on { background: var(--night-ink); color: var(--night); }
+/* Where the slip in the plan lands: a hairline ring and a dot. */
+.dp-day.is-delayed:not(.is-on) { box-shadow: inset 0 0 0 1px var(--night-line-2); }
+.dp-day.is-delayed::after { content: ""; position: absolute; bottom: 0.28rem; width: 0.22rem; height: 0.22rem; border-radius: 50%; background: currentColor; }
+
+.dp-k { margin: 0.2rem 0 -0.4rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.02em; color: var(--night-2); }
+.dp-hours { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0.25rem; }
+.dp-hours button {
+  padding: 0.38rem 0; border: 0; border-radius: 180px; background: transparent; color: var(--night-3);
+  box-shadow: inset 0 0 0 1px var(--night-line); font-family: var(--sans); font-size: 0.8rem; cursor: pointer;
+  transition: background-color 0.25s, color 0.25s;
+}
+.dp-hours button:hover:not(:disabled) { color: var(--night-ink); box-shadow: inset 0 0 0 1px var(--night-ink); }
+.dp-hours button[aria-pressed="true"] { background: var(--night-ink); color: var(--night); box-shadow: none; }
+.dp-hours button:disabled { opacity: 0.25; cursor: default; }
+
+.dp-foot { display: grid; gap: 0.8rem; padding-top: 0.9rem; border-top: 1px solid var(--night-line); }
+.dp-note { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--night-3); }
+.dp-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--night-line-2); position: relative; flex: none; }
+.dp-dot::after { content: ""; position: absolute; inset: 0.16rem; border-radius: 50%; background: var(--night-ink); }
+.dp-note:has(.dp-note-t:empty) { display: none; }
+.dp-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.dp-cancel, .dp-set {
+  padding: 0.55rem 1.2rem; border: 0; border-radius: 1.5rem; font-family: var(--sans); font-size: 0.9rem; cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+}
+.dp-cancel { background: transparent; color: var(--night-ink); box-shadow: inset 0 0 0 1px var(--night-line-2); }
+.dp-cancel:hover { box-shadow: inset 0 0 0 1px var(--night-ink); }
+.dp-set { background: var(--paper); color: var(--dark); }
+.dp-set:hover { background: var(--sun); }
+.dp :focus-visible { outline: 2px solid var(--night-ink); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .dp-trigger { width: 100%; }
+  .dp-pop { padding: 1rem; }
+  .dp-hours { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+/* ───────────── Backup finder (on the slip strip) ───────────── */
+.backup { display: grid; gap: 0.7rem; padding: 1rem 0 0.2rem; border-top: 1px solid var(--night-line); }
+.backup-row { display: grid; gap: 0.55rem; }
+.backup-row .plan-k { text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--night-3); }
+.backup-row .seg { justify-self: start; }
+.backup-row .seg button { min-width: 3.6rem; justify-content: center; }
+.backup-read { margin: 0; font-size: 1rem; line-height: 1.45; color: var(--night-3); min-height: 1.45em; }
+.backup-read b { font-weight: 500; color: var(--night-ink); }
+.backup-go { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.backup-go:empty { display: none; }
+.backup-go .link-btn {
+  border: 0; border-radius: 1.5rem; padding: 0.45rem 1rem; background: transparent; color: var(--night-ink);
+  box-shadow: inset 0 0 0 1px var(--night-line-2); font: inherit; font-size: 0.85rem; text-decoration: none; cursor: pointer;
+}
+.backup-go .link-btn:hover { background: var(--night-ink); color: var(--night); }
+.backup-on { padding: 0.45rem 1rem; border-radius: 1.5rem; background: var(--night-ink); color: var(--night); font-size: 0.85rem; }
+
+/* Slips that meet the need: a green rule under the bars. The earliest one gets a taller rule. */
+.slip-ok { position: absolute; left: 0.12rem; right: 0.12rem; bottom: 1.05rem; height: 3px; background: transparent; }
+.slip-cell.is-ok .slip-ok { background: var(--pos); }
+.slip-cell.is-pick .slip-ok { height: 6px; bottom: 0.9rem; }
+.slips-legend .sl-ok { background: var(--pos); height: 3px; vertical-align: middle; }
+.slips-read { color: var(--night-3); }
+
+/* ───────────── Unbroken stretches, under the totals ───────────── */
+.metrics .stretches { margin-top: 2rem; }
+.stretches caption .cap-in { display: grid; gap: 0.3rem; }
+.cap-note { text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--night-2); }
+.stretches tbody th { font-size: 1rem; }
+.stretches tbody th .ico { flex: none; }
+.st-val { font-size: 1.6rem; font-weight: 400; letter-spacing: -0.03em; line-height: 1.05; }
+.st-at { font-size: 1.15rem; letter-spacing: -0.01em; }
+.st-none { font-size: 1rem; color: var(--night-2); }
+.stretches .m-change span:first-child { font-size: 0.95rem; }
+
+/* ───────────── Timelines, easier to read ───────────── */
+/* Brighter axis: hour labels in near-white, a day name over each 24 hours. */
+.tl-axis { height: 4.1rem; }
+.tl-tick span { color: var(--night-3); font-size: 0.78rem; }
+.tl-tick.major { border-color: var(--night-3); }
+/* Day names sit just above the hour numbers, clear of the cursor tag on the top line. */
+.tl-day {
+  position: absolute; bottom: 1.5rem; transform: translateX(-50%);
+  font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--night-2); white-space: nowrap;
+}
+/* The crossings line under each stay's title: sentence case, readable size. */
+.tl-head-ev { font-size: 0.85rem; text-transform: none; letter-spacing: 0; color: var(--night-3); }
+.tl-date { color: var(--night-3); }
+/* Next crossing from the cursor, on the active stay. */
+.tl-next { margin: -0.3rem 0 0.7rem; font-size: 0.95rem; line-height: 1.35; color: var(--night-3); min-height: 1.35em; }
+.tl-next:empty { display: none; }
+.tl-next b { font-weight: 500; color: var(--night-ink); }
+.tl-next-k { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--night-2); margin-right: 0.3rem; }
+/* The "both" row gets the same height as the others so its bar can carry a label. */
+.tl-row.both .tl-track { height: 2.1rem; }
+.seg-bar.both { top: 0.3rem; bottom: 0.3rem; }
+.tl-row.both .tl-whole.above { display: block; color: var(--night); font-weight: 500; }
+.tl-whole { font-size: 0.72rem; }
+.tl-whole.below { color: var(--night-3); }
+/* Each long stretch shows its length on the bar. */
+/* Lengths sit at the start of the bar. Crossing labels sit at its ends, so the two do not collide. */
+.seg-bar { display: flex; align-items: center; justify-content: flex-start; overflow: hidden; }
+.seg-len { padding-left: 0.5rem; font-size: 0.74rem; font-weight: 500; line-height: 1; white-space: nowrap; pointer-events: none; }
+.seg-bar.sun .seg-len { color: #1c1403; }
+.seg-bar.earth .seg-len { color: #06203f; }
+.seg-bar.both .seg-len { color: var(--night); }
+/* Crossing labels: a little larger and brighter. */
+.tl-ev-label { font-size: 0.78rem; color: var(--night-ink); }
+.tl-total { color: var(--night-3); }
+.tl-label { color: var(--night-ink); }
+
+@media (max-width: 640px) {
+  .tl-axis { height: 3.9rem; }
+  .tl-tick span { font-size: 0.72rem; }
+  .tl-day { font-size: 0.62rem; bottom: 1.4rem; }
+  .tl-head-ev { font-size: 0.8rem; }
+  .tl-next { font-size: 0.88rem; }
+  .seg-len { font-size: 0.66rem; }
+  .tl-ev-label { font-size: 0.7rem; }
+  .tl-whole { font-size: 0.62rem; }
+}
+
+/* ───────────── 3D views: a placeholder while they load ─────────────
+   The globe and the lander scene stay black until three.js and NASA's Moon maps arrive. Say so. */
+html[data-page="tool"] body:not(.moon-ready):not(.no-3d) .globe-wrap::before,
+body:not(.has-3d):not(.no-3d) .surface-wrap::before {
+  content: "Loading the 3D view";
+  position: absolute; left: 50%; top: 45%; z-index: 1; transform: translate(-50%, -50%);
+  padding: 0.5rem 1rem 0.5rem 2.1rem; border-radius: 1.5rem;
+  box-shadow: inset 0 0 0 1px var(--night-line-2);
+  font-size: 0.8rem; color: var(--night-3); white-space: nowrap;
+  background:
+    radial-gradient(circle at 1.1rem 50%, var(--night-ink) 0 0.22rem, transparent 0.24rem) no-repeat,
+    var(--night);
+  animation: ls-load 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ls-load { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-page="tool"] body:not(.moon-ready):not(.no-3d) .globe-wrap::before,
+  body:not(.has-3d):not(.no-3d) .surface-wrap::before { animation: none; }
+}
+
+/* ───────────── Phones: the answer first, then the timelines, then the details, 3D last ─────────────
+   The hero, its controls and the instrument section open up (display: contents) so their parts can
+   be put in order: question, answer, site, the two dates, the totals, the timelines, the plan, the
+   slip strip and backup finder, then the globe and the lander scene. */
+@media (max-width: 767px) {
+  html[data-page="tool"] main { display: flex; flex-direction: column; }
+  html[data-page="tool"] .hero,
+  html[data-page="tool"] .hero-copy,
+  html[data-page="tool"] .controls,
+  html[data-page="tool"] .instrument { display: contents; }
+
+  .hero-copy > .eyebrow,
+  .hero-copy > h1,
+  .hero-copy > .answer,
+  .controls > *,
+  .hero-copy > .metrics,
+  .globe-wrap,
+  .instrument > * { margin-left: 1rem; margin-right: 1rem; min-width: 0; }
+
+  .hero-copy > .eyebrow { order: 1; margin-top: 6.5rem; }
+  .hero-copy > h1 { order: 2; }
+  .hero-copy > .answer { order: 3; margin-bottom: 1.4rem; padding-bottom: 1.6rem; border-bottom: 1px solid var(--night-line); }
+  .controls > .site-picker { order: 4; }
+  .controls > .touchdown { order: 5; margin-top: 1.4rem; }
+  .hero-copy > .metrics { order: 6; margin-top: 2rem; }
+  .instrument > .sec-head { order: 7; margin-top: 3rem; padding-top: 2.5rem; border-top: 1px solid var(--night-line); margin-bottom: 1.8rem; }
+  .instrument > .timelines { order: 8; }
+  .controls > .plan { order: 9; margin-top: 3rem; padding-top: 1.6rem; border-top: 1px solid var(--night-line); }
+  .controls > .slips { order: 10; margin-top: 2rem; }
+  .globe-wrap { order: 11; margin-top: 3rem; position: relative; top: auto; }
+  .instrument > .sky { order: 12; margin-top: 2.5rem; }
+  .instrument > .clock { order: 13; margin-left: 0.6rem; margin-right: 0.6rem; }
+  html[data-page="tool"] .replay { order: 20; margin-top: 3rem; }
+  html[data-page="tool"] .methods { order: 21; }
+  html[data-page="tool"] .home { order: 0; }
+
+  /* Totals table: room for the change column at 375 px. */
+  .metrics th, .metrics td { padding-top: 0.85rem; padding-bottom: 0.85rem; }
+  .metrics tbody th { font-size: 0.95rem; gap: 0.45rem; }
+  .metrics td { padding-left: 0.5rem; }
+  .m-val { font-size: 1.45rem; }
+  .st-val { font-size: 1.3rem; }
+  .st-at { font-size: 0.95rem; }
+  .m-change span:first-child, .stretches .m-change span:first-child { font-size: 0.85rem; }
+  .m-mini { width: 2.8rem; }
+  .stretches tbody th { font-size: 0.88rem; }
+
+  .backup-row .seg { justify-self: stretch; }
+  .backup-row .seg button { min-width: 0; padding-left: 0.4rem; padding-right: 0.4rem; }
+  .backup-read { font-size: 0.95rem; }
+}
