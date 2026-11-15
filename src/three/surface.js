@@ -8,6 +8,7 @@ import { regolithTexture, glowTexture, starfield, rng } from './textures.js';
 import { azElToLocal, renderLoop, easeInOut } from './geo.js';
 import { fitSurfaceCamera, fitOverhead, poseBasis, FIT } from './surfaceFrame.js';
 import { fmtDeg } from '../format.js';
+import { detailedGround, regolithNormal, scatterRocks, landerMaterials, sunDisc, milkyWay, earthShader, createPost } from './surfaceLook.js';
 
 const SKY_R = 1400;
 const GROUND_R = 1100;
@@ -88,12 +89,9 @@ function groundMaterial(tex) {
   return mat;
 }
 
-function buildLander() {
+function buildLander(mats) {
   const L = new THREE.Group();
-  const foil = new THREE.MeshStandardMaterial({ color: 0xc8a046, metalness: 0.75, roughness: 0.38 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xe7e5df, metalness: 0.1, roughness: 0.6 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2b2e33, metalness: 0.5, roughness: 0.5 });
-  const panel = new THREE.MeshStandardMaterial({ color: 0x1b2a4a, metalness: 0.6, roughness: 0.3 });
+  const { foil, white, dark, panel } = mats;
   const add = (m) => {
     m.castShadow = true;
     m.receiveShadow = true;
@@ -153,7 +151,7 @@ function buildLander() {
     const x = (i / 12) * 0.42;
     prof.push(new THREE.Vector2(x, x * x * 1.2));
   }
-  const bowl = new THREE.Mesh(new THREE.LatheGeometry(prof, 32), new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.5, side: THREE.DoubleSide }));
+  const bowl = new THREE.Mesh(new THREE.LatheGeometry(prof, 32), mats.dish);
   bowl.rotation.x = Math.PI / 2; // lathe axis +y → dish opens toward +z
   bowl.castShadow = true;
   const feed = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 6), dark);
@@ -168,10 +166,10 @@ function buildLander() {
 export function createSurface(container) {
   const wrap = container.parentElement;
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // the post passes run at this resolution too
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.15;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0x020306, 1);
@@ -227,10 +225,15 @@ export function createSurface(container) {
   // Ground
   const tex = regolithTexture();
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const { geometry: groundGeo, height: groundHeight } = groundGeometry();
-  const ground = new THREE.Mesh(groundGeo, groundMaterial(tex));
+  const { geometry: groundGeo, height: groundHeight } = detailedGround(GROUND_R);
+  const groundMat = groundMaterial(tex);
+  const regolithN = regolithNormal();
+  groundMat.normalMap = regolithN;
+  groundMat.normalScale.set(0.5, 0.5);
+  const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.receiveShadow = true;
   scene.add(ground);
+  scene.add(scatterRocks(groundHeight, regolithN));
 
   /** Keep the eye above the terrain directly under it (crater rims included). */
   function clampToGround() {
@@ -243,6 +246,7 @@ export function createSurface(container) {
 
   // Stars (only above the horizon; the ground hides the rest anyway)
   scene.add(starfield(2600, SKY_R * 1.4, 21, -50));
+  scene.add(milkyWay(SKY_R * 1.38));
 
   // Horizon ring & cardinal labels
   const ringPts = [];
@@ -250,7 +254,7 @@ export function createSurface(container) {
     const a = (i / 360) * Math.PI * 2;
     ringPts.push(new THREE.Vector3(Math.cos(a) * (GROUND_R - 5), 0.5, Math.sin(a) * (GROUND_R - 5)));
   }
-  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 })));
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1 })));
   const cardinal = [
     [0, 'N'], [45, 'NE'], [90, 'E'], [135, 'SE'], [180, 'S'], [225, 'SW'], [270, 'W'], [315, 'NW'],
   ];
@@ -264,16 +268,17 @@ export function createSurface(container) {
   }
 
   // Lander
-  const { group: lander, dish } = buildLander();
+  const { group: lander, dish } = buildLander(landerMaterials(renderer));
   scene.add(lander);
 
   // Lights
-  const sunLight = new THREE.DirectionalLight(0xfff3df, 3.4);
+  const sunLight = new THREE.DirectionalLight(0xfffaf2, 3.4);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.set(2048, 2048);
-  Object.assign(sunLight.shadow.camera, { left: -42, right: 42, top: 42, bottom: -42, near: 1, far: 400 });
-  sunLight.shadow.bias = -0.0004;
-  sunLight.shadow.normalBias = 0.04;
+  Object.assign(sunLight.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 420 });
+  sunLight.shadow.bias = -0.0003;
+  sunLight.shadow.normalBias = 0.05;
+  sunLight.shadow.radius = 2.5;
   scene.add(sunLight, sunLight.target);
   const earthLight = new THREE.DirectionalLight(0xa9c8ff, 0.0);
   scene.add(earthLight, earthLight.target);
@@ -282,32 +287,20 @@ export function createSurface(container) {
 
   // Sun & Earth in the sky
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  sunSprite.scale.setScalar(260);
+  sunSprite.scale.setScalar(150);
+  sunSprite.material.opacity = 0.7;
   scene.add(sunSprite);
+  const sunCore = sunDisc(SKY_R);
+  scene.add(sunCore);
   const earthMat = new THREE.ShaderMaterial({
     uniforms: { uSun: { value: new THREE.Vector3() } },
-    vertexShader: `varying vec3 vN; varying vec3 vP; void main(){ vN = normalize(mat3(modelMatrix)*normal); vP=position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-    fragmentShader: `uniform vec3 uSun; varying vec3 vN; varying vec3 vP;
-      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }
-      float n3(vec3 p){ vec3 i=floor(p); vec3 f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),
-                   mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z); }
-      void main(){
-        vec3 p = normalize(vP)*3.0;
-        float land = smoothstep(0.52,0.6, n3(p)*0.6 + n3(p*2.3)*0.4);
-        float cloud = smoothstep(0.55,0.8, n3(p*3.1+7.0)*0.6 + n3(p*6.0)*0.4);
-        vec3 col = mix(vec3(0.07,0.22,0.55), vec3(0.32,0.42,0.28), land);
-        col = mix(col, vec3(0.95), cloud*0.85);
-        float lit = smoothstep(-0.06, 0.12, dot(normalize(vN), normalize(uSun)));
-        gl_FragColor = vec4(mix(vec3(0.01,0.015,0.03), col*1.25, lit), 1.0);
-        #include <colorspace_fragment>
-      }`,
+    ...earthShader(),
   });
   // Earth spans ~1.9° from the Moon; drawn ~1.7× larger for legibility.
   const earth = new THREE.Mesh(new THREE.SphereGeometry(SKY_R * Math.tan(THREE.MathUtils.degToRad(0.95)) * 1.7, 48, 32), earthMat);
   scene.add(earth);
   const earthHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(150,200,255,0.5)', 'rgba(90,150,255,0.12)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  earthHalo.scale.setScalar(260);
+  earthHalo.scale.setScalar(150);
   scene.add(earthHalo);
 
   const mkLabel = (cls) => {
@@ -560,6 +553,7 @@ export function createSurface(container) {
     { passive: false },
   );
 
+  const post = createPost(renderer, scene, camera);
   const loop = renderLoop(container, (now) => {
     if (camAnim) stepCamAnim(now);
     if (zoomGoal !== null) stepZoom();
@@ -567,7 +561,7 @@ export function createSurface(container) {
     if (clampToGround()) loop.invalidate();
     camera.updateMatrixWorld();
     labelSides();
-    renderer.render(scene, camera);
+    post.render();
     labels.render(scene, camera);
     placeEdgeTags();
     dome.draw(currentView());
@@ -582,6 +576,7 @@ export function createSurface(container) {
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
     renderer.setSize(w, h, false);
+    post.setSize(w, h);
     renderer.domElement.style.width = `${w}px`;
     renderer.domElement.style.height = `${h}px`;
     labels.setSize(w, h);
@@ -781,8 +776,10 @@ export function createSurface(container) {
     const sunUp = THREE.MathUtils.smoothstep(sample.sun.el, -SUN_RADIUS_DEG, SUN_RADIUS_DEG);
     sunLight.intensity = 3.4 * sunUp;
     sunLight.position.copy(sDir).multiplyScalar(160);
-    sunSprite.material.opacity = Math.max(sunUp, 0.0);
+    sunSprite.material.opacity = 0.7 * Math.max(sunUp, 0.0);
     sunSprite.visible = sunUp > 0.001;
+    sunCore.position.copy(sunSprite.position);
+    sunCore.visible = sunSprite.visible;
 
     // Earthshine scales with Earth's illuminated fraction seen from the Moon.
     const elong = sDir.angleTo(eDir);
