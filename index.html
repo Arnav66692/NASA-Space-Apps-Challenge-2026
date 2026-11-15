@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Long Shadow · Lunar touchdown, nine days later</title>
+    <meta
+      name="description"
+      content="What changes in the first 72 hours on the Moon if touchdown slips nine days? Sun and Earth visibility at real landing sites from NASA JPL Horizons."
+    />
+    <meta name="theme-color" content="#07090c" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23d9d6cf'/%3E%3Cpath d='M16 3a13 13 0 0 1 0 26z' fill='%2307090c'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <a class="skip" href="#instrument">Skip to the comparison</a>
+
+    <header class="topbar">
+      <a class="wordmark" href="#top" aria-label="Long Shadow, home">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12" class="wm-moon" /><path d="M16 4a12 12 0 0 1 0 24z" class="wm-shade" /></svg>
+        Long Shadow
+      </a>
+      <nav aria-label="Sections">
+        <a href="#instrument">Compare</a>
+        <a href="#replay">Replay</a>
+        <a href="#methods">Methods</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <!-- ───────────── Hero: question, answer, controls ───────────── -->
+      <section class="hero" aria-labelledby="q">
+        <div class="hero-copy">
+          <p class="eyebrow">NASA Space Apps 2026 · Lunar Landing Site Navigator</p>
+          <h1 id="q">What changes in the first 72&nbsp;hours on the Moon if touchdown slips <em>nine days</em>?</h1>
+
+          <p class="answer" id="answer" aria-live="polite"></p>
+
+          <div class="controls">
+            <fieldset class="site-picker">
+              <legend>Landing site</legend>
+              <div class="seg" role="radiogroup" aria-label="Landing site" id="site-picker"></div>
+              <p class="site-meta" id="site-meta"></p>
+            </fieldset>
+
+            <div class="touchdown" role="group" aria-label="Touchdown date">
+              <button class="td" id="td-original" type="button" data-scenario="original" aria-pressed="true">
+                <span class="td-k">Original touchdown</span>
+                <span class="td-v num">Mar 15, 2025</span>
+                <span class="td-time num">00:00 UTC</span>
+              </button>
+              <button class="apply" id="apply-delay" type="button">
+                <span class="apply-label">Apply +9 days</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+              </button>
+              <button class="td" id="td-delayed" type="button" data-scenario="delayed" aria-pressed="false">
+                <span class="td-k">Delayed touchdown</span>
+                <span class="td-v num">Mar 24, 2025</span>
+                <span class="td-time num">00:00 UTC</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics" id="metrics">
+            <table>
+              <caption>
+                <span class="cap-in">Hours above the horizon in the first 72&nbsp;h
+                <a class="model-tag" href="#methods">Smooth-horizon estimate</a></span>
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col"><span class="sr">Metric</span></th>
+                  <th scope="col" class="num">Original<span class="th-d">Mar 15</span></th>
+                  <th scope="col" class="num">Delayed<span class="th-d">Mar 24</span></th>
+                  <th scope="col" class="num">Change</th>
+                </tr>
+              </thead>
+              <tbody id="metrics-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <figure class="globe-wrap" aria-labelledby="globe-cap">
+          <div class="globe" id="globe" role="img" aria-label="3D Moon globe"></div>
+          <div class="globe-hud" aria-hidden="true">
+            <span class="hud-scn" id="globe-scn"></span>
+            <span class="hud-t num" id="globe-t"></span>
+          </div>
+          <figcaption id="globe-cap">
+            <span class="lg"><i class="sw sw-term"></i>Sunrise / sunset line</span>
+            <span class="lg"><i class="sw sw-limb"></i>Earth on the horizon</span>
+            <span class="lg-note">Drag to rotate. Lighting from JPL Sun direction at the selected instant.</span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- ───────────── Instrument: timelines + sky ───────────── -->
+      <section class="instrument" id="instrument" aria-labelledby="inst-h">
+        <header class="sec-head">
+          <h2 id="inst-h">The first 72 hours, side by side</h2>
+          <p class="sec-sub">
+            Bars show when each body is above the modeled horizon. Click a timeline or use the mission clock to
+            move through the stay. <a class="model-tag" href="#methods">Smooth-horizon estimate</a>
+          </p>
+        </header>
+
+        <div class="timelines" id="timelines"></div>
+
+        <div class="sky" aria-labelledby="sky-h">
+          <h3 id="sky-h" class="sr">Sky at the selected instant</h3>
+          <figure class="surface-wrap">
+            <div class="surface" id="surface" role="img" aria-label="3D view of the landing site"></div>
+            <div class="surface-hud">
+              <span class="hud-site" id="surf-site"></span>
+              <span class="hud-t num" id="surf-t"></span>
+              <span class="hud-state" id="surf-state"></span>
+            </div>
+            <div class="replay-toast" id="replay-toast" hidden></div>
+            <figcaption class="sr">3D lander at the site. The Sun and Earth are placed by their JPL azimuth and elevation. The ground is a smooth reference horizon.</figcaption>
+          </figure>
+
+          <div class="sky-side">
+            <figure class="strip-wrap">
+              <figcaption class="strip-cap">
+                Horizon strip
+                <span class="muted">azimuth → · elevation ↑</span>
+              </figcaption>
+              <div id="strip"></div>
+            </figure>
+            <dl class="readout" id="readout"></dl>
+            <div class="next" id="next-crossing" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <!-- Mission clock (sticky) -->
+        <div class="clock" id="clock" role="group" aria-label="Mission clock">
+          <div class="clock-scn" role="radiogroup" aria-label="Active scenario" id="scn-switch"></div>
+          <button class="play" id="play" type="button" aria-label="Play through the 72 hours">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="i-play"><path d="M7 5l12 7-12 7z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="i-pause"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+          </button>
+          <div class="scrub">
+            <input
+              type="range"
+              id="scrubber"
+              min="0"
+              max="4320"
+              step="1"
+              value="0"
+              aria-label="Elapsed time since touchdown"
+              aria-describedby="scrub-help"
+            />
+            <div class="scrub-ticks" aria-hidden="true" id="scrub-ticks"></div>
+          </div>
+          <output class="clock-read num" id="clock-read" for="scrubber"></output>
+          <p id="scrub-help" class="sr">
+            Arrow keys move one hour. Shift plus arrow moves ten minutes. Page Up and Page Down move six hours. Home and
+            End jump to touchdown and to hour 72.
+          </p>
+        </div>
+      </section>
+
+      <!-- ───────────── Blue Ghost replay ───────────── -->
+      <section class="replay" id="replay" aria-labelledby="rp-h">
+        <div class="rp-copy">
+          <p class="eyebrow">Mission replay · Mare Crisium</p>
+          <h2 id="rp-h">Blue Ghost watched the Sun go down.</h2>
+          <p>
+            Firefly's Blue Ghost landed on March 2, 2025 and worked through the lunar day. Replay the original
+            scenario at the Blue Ghost site and watch the modeled Sun cross the smooth horizon on March 16.
+          </p>
+          <div class="rp-actions">
+            <button class="btn-primary" id="replay-btn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z" /></svg>
+              Replay the sunset
+            </button>
+            <div class="stepper" role="group" aria-label="Step through the sunset">
+              <button type="button" id="step-back" aria-label="Back one hour">−1 h</button>
+              <button type="button" id="step-sunset">Jump to sunset</button>
+              <button type="button" id="step-fwd" aria-label="Forward one hour">+1 h</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rp-compare">
+          <div class="rp-col">
+            <p class="rp-k">This model · JPL Horizons</p>
+            <p class="rp-v num" id="rp-model">~20:11 UTC</p>
+            <p class="rp-d">
+              March 16, 2025. Sun centre crosses the smooth reference horizon, interpolated from hourly samples
+              (20:10:39). A separate five-minute JPL query brackets it between 20:10 (+0.005°) and 20:15 (−0.035°).
+            </p>
+          </div>
+          <div class="rp-col">
+            <p class="rp-k">Reported by Firefly</p>
+            <p class="rp-v">Sunset imagery, then 5+ h of night ops</p>
+            <p class="rp-d">
+              Firefly reported that Blue Ghost captured imagery of the sunset on March 16, 2025 and kept operating
+              for just over five hours into the lunar night. Firefly did not give a precise sunset time, so we do
+              not compare minutes.
+              <a href="https://investors.fireflyspace.com/news-releases/news-release-details/blue-ghost-mission-1-live-updates" target="_blank" rel="noopener">Firefly mission updates ↗</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────── Methods ───────────── -->
+      <section class="methods" id="methods" aria-labelledby="m-h">
+        <h2 id="m-h">Methods &amp; sources</h2>
+        <p class="m-lede"><strong>Smooth-horizon estimate.</strong> Local terrain, eclipses, and lander hardware are outside this model.</p>
+        <div class="m-grid">
+          <div>
+            <h3>What the numbers mean</h3>
+            <p>
+              <strong>Sun above horizon</strong> marks a geometric opportunity for solar power.
+              <strong>Earth above horizon</strong> marks a geometric opportunity for direct-to-Earth radio. A body
+              counts as above when the centre of its disk is above the smooth reference horizon (elevation &gt; 0°).
+              On polar terrain, nearby ridges can materially change both windows.
+              <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
+            </p>
+          </div>
+          <div>
+            <h3>Data</h3>
+            <p>
+              Four hypothetical touchdowns at two real landing sites, each 73 hourly samples (72 intervals) from the
+              <a href="https://ssd-api.jpl.nasa.gov/doc/horizons.html" target="_blank" rel="noopener">JPL Horizons API ↗</a>:
+              observer tables from surface site <code>coord@301</code>, geodetic coordinates at zero altitude, Sun
+              (<code>10</code>) and Earth (<code>399</code>) centres, apparent airless azimuth/elevation
+              (<code>QUANTITIES=4</code>), UTC. Azimuth runs clockwise from north. Site coordinates from
+              <a href="https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html" target="_blank" rel="noopener">NASA NSSDCA ↗</a>.
+              The CSVs ship with the site and the collector script (<code>Get-LunarHorizons.ps1</code>) regenerates them.
+            </p>
+          </div>
+          <div>
+            <h3>Calculation</h3>
+            <p>
+              Crossings are linearly interpolated between hourly samples
+              (<code>t = t₀ + e₀/(e₀−e₁)·Δt</code>). Above-horizon intervals are merged, summed, and intersected
+              for “both above”. The bars, totals, countdowns and sky views all read from the same intervals. The
+              change is <em>delayed − original</em>, rounded only for display. Between samples the sky view
+              interpolates elevation linearly and azimuth along the shorter arc.
+            </p>
+          </div>
+          <div>
+            <h3>Checks completed</h3>
+            <p>
+              Automated tests reproduce every reference total and crossing for all four presets (wholly above,
+              wholly below, rising, setting, overlap). Blue Ghost's sunset was bracketed with a separate five-minute
+              JPL query. A broader 10-site × 10-date check against direct JPL queries has not been run yet, and
+              eclipse and lander-tilt validation are out of scope.
+            </p>
+          </div>
+          <div>
+            <h3>3D views</h3>
+            <p>
+              Original procedural renderings, not imagery. The globe converts each site's local Sun and Earth
+              directions to Moon-fixed vectors to draw the sunrise/sunset line and the Earth-horizon line (Earth
+              parallax across the Moon, ≤0.3°, is ignored in the globe only). The surface view places the Sun and
+              Earth by azimuth and elevation. The lander is a generic model. Sizes and terrain bumps are illustrative.
+            </p>
+          </div>
+          <div>
+            <h3>Sites</h3>
+            <ul class="sites-list" id="sites-list"></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p>
+        Long Shadow · NASA Space Apps Challenge 2026 ·
+        <a href="https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/" target="_blank" rel="noopener">Lunar Landing Site Navigator ↗</a>
+      </p>
+      <p class="muted">
+        Hypothetical touchdowns at real landing sites. Ephemerides: NASA/JPL Horizons. Built with AI assistance;
+        see the project page for the team's disclosure.
+      </p>
+    </footer>
+
+    <div class="sr" aria-live="polite" id="live"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
