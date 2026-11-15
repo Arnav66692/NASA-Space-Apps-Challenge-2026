@@ -5,7 +5,7 @@ import './styles.css';
 import './unseen.css';
 
 import { DATASETS, SITES, FEATURED, PRESET_START_MS, PRESET_SLIP_DAYS, customSite, scenarioLabel } from './data.js';
-import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, eclipseAt, HOUR_MS } from './calc.js';
+import { analyze, delayImpact, sampleAt, nextCrossing, aboveAt, eclipseAt, HOUR_MS, HORIZON_MARGINS } from './calc.js';
 import {
   fmtHours, fmtUtc, fmtUtcTime, fmtDuration, fmtElapsed, fmtDeg, fmtChange, fmtDay, fmtClock, slipWords, slipShort,
   compass, EVENT_NAME,
@@ -37,11 +37,12 @@ const pairCache = new Map();
 const isPreset = (site, startMs, slipDays) =>
   Boolean(DATASETS[site.id]) && startMs === PRESET_START_MS && slipDays === PRESET_SLIP_DAYS;
 
-const pairKey = (site, startMs, slipDays) => `${site.id}|${site.lat}|${site.lonE}|${startMs}|${slipDays}`;
+const pairKey = (site, startMs, slipDays, horizonDeg) =>
+  `${site.id}|${site.lat}|${site.lonE}|${startMs}|${slipDays}|${horizonDeg}`;
 
 /** Original and delayed analyses for a plan, or null while the table is still loading. */
-function pairFor(site, startMs, slipDays) {
-  const key = pairKey(site, startMs, slipDays);
+function pairFor(site, startMs, slipDays, horizonDeg = 0) {
+  const key = pairKey(site, startMs, slipDays, horizonDeg);
   if (pairCache.has(key)) return pairCache.get(key);
   let pair;
   if (isPreset(site, startMs, slipDays)) {
@@ -51,12 +52,12 @@ function pairFor(site, startMs, slipDays) {
     pair = {
       key,
       source: 'horizons',
-      original: analyze({ ...ds.original, slipDays, ...eclipseFor(ds.original.rows) }),
-      delayed: analyze({ ...ds.delayed, slipDays, ...eclipseFor(ds.delayed.rows) }),
+      original: analyze({ ...ds.original, slipDays, horizonDeg, ...eclipseFor(ds.original.rows) }),
+      delayed: analyze({ ...ds.delayed, slipDays, horizonDeg, ...eclipseFor(ds.delayed.rows) }),
     };
   } else {
     if (!eph) return null;
-    const build = (scenario, t0) => analyzeStay(eph, site, t0, { site: site.id, scenario, file: null, slipDays });
+    const build = (scenario, t0) => analyzeStay(eph, site, t0, { site: site.id, scenario, file: null, slipDays, horizonDeg });
     pair = {
       key,
       source: 'table',
@@ -79,12 +80,13 @@ const state = {
   custom: null,
   startMs: PRESET_START_MS,
   slipDays: PRESET_SLIP_DAYS,
+  horizonDeg: 0,
   scenario: 'original',
   elapsedMin: 0,
 };
 const siteIn = (s) => (s.site === 'custom' ? s.custom : SITES[s.site]);
 const currentSite = () => siteIn(state);
-const pair = () => pairFor(currentSite(), state.startMs, state.slipDays);
+const pair = () => pairFor(currentSite(), state.startMs, state.slipDays, state.horizonDeg);
 const active = () => pair()[state.scenario];
 const selectedT = () => active().start + state.elapsedMin * 60_000;
 
@@ -132,6 +134,7 @@ function answerHtml(p, site, slipDays) {
   }
   const earlier = `The original touchdown offers ${fmtHours(o.both.hours)} hours with both above the horizon.`;
   const where = site.id === 'custom' ? 'this custom site' : site.name;
+  const blocked = o.horizonDeg > 0 ? `, with the lowest ${o.horizonDeg}° of sky blocked by terrain,` : '';
   const eclipse = [['original', o], ['delayed', d]]
     .filter(([, a]) => a.eclipse.any.length)
     .map(([name, a]) =>
@@ -140,7 +143,7 @@ function answerHtml(p, site, slipDays) {
         : ` In the ${name} stay Earth partly covers the Sun for a while.`,
     )
     .join('');
-  return `<strong>At ${where}, a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}${eclipse}`;
+  return `<strong>At ${where}${blocked} a ${slipWords(slipDays).replace(/ days?$/, '')}-day slip means ${sunPart} and ${earthPart}.</strong> ${explain} ${earlier}${eclipse}`;
 }
 
 function metricsHtml(p) {
@@ -282,6 +285,19 @@ slipRange.addEventListener('input', () => {
   stopAnim();
   setState({ slipDays: days });
 });
+// Terrain margin: the lowest N degrees of sky count as blocked. A stand-in for ridges and crater rims.
+const marginPicker = $('#margin-picker');
+marginPicker.innerHTML = HORIZON_MARGINS.map(
+  (m) => `<button type="button" role="radio" data-margin="${m}" aria-checked="false"><span class="sp-name num">${m}°</span>${m === 0 ? '<span class="sp-sub">smooth</span>' : ''}</button>`,
+).join('');
+marginPicker.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-margin]');
+  if (!b) return;
+  stopAnim();
+  setState({ horizonDeg: Number(b.dataset.margin) });
+});
+radioKeys(marginPicker, '[data-margin]', (b) => setState({ horizonDeg: Number(b.dataset.margin) }));
+
 $('#plan-reset').addEventListener('click', () => {
   stopAnim();
   setState({ startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS });
@@ -300,7 +316,7 @@ $('#copy-link').addEventListener('click', async () => {
 function stateQuery() {
   const isDefault =
     state.site === 'athena' && state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS &&
-    state.scenario === 'original' && Math.round(state.elapsedMin) === 0;
+    state.horizonDeg === 0 && state.scenario === 'original' && Math.round(state.elapsedMin) === 0;
   if (isDefault) return '';
   const q = new URLSearchParams();
   q.set('site', state.site);
@@ -310,6 +326,7 @@ function stateQuery() {
   }
   q.set('start', toInputValue(state.startMs));
   q.set('slip', String(state.slipDays));
+  if (state.horizonDeg > 0) q.set('h', String(state.horizonDeg));
   q.set('view', state.scenario);
   q.set('t', String(Math.round(state.elapsedMin)));
   return `?${q}`;
@@ -349,6 +366,8 @@ function patchFromUrl() {
   }
   const slip = Number(q.get('slip'));
   if (Number.isInteger(slip) && slip >= 1 && slip <= MAX_SLIP_DAYS) patch.slipDays = slip;
+  const h = Number(q.get('h'));
+  if (q.has('h') && HORIZON_MARGINS.includes(h)) patch.horizonDeg = h;
   if (['original', 'delayed'].includes(q.get('view'))) patch.scenario = q.get('view');
   const t = Number(q.get('t'));
   if (q.has('t') && Number.isFinite(t)) patch.elapsedMin = Math.min(Math.max(t, 0), MAX_MIN);
@@ -413,10 +432,10 @@ $('#play').addEventListener('click', () => {
 });
 
 // ───────────── Blue Ghost replay (always the reference plan) ─────────────
-const REPLAY = { site: 'blueGhost', scenario: 'original', startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS };
+const REPLAY = { site: 'blueGhost', scenario: 'original', startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS, horizonDeg: 0 };
 const onReplayPlan = () =>
   state.site === 'blueGhost' && state.scenario === 'original' &&
-  state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS;
+  state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS && state.horizonDeg === 0;
 const bgSunset = () => A.blueGhost.original.bodies.sun.events.find((e) => e.type === 'set');
 const sunsetMin = () => (bgSunset().t - A.blueGhost.original.start) / 60_000;
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -462,6 +481,7 @@ const ECLIPSE_REPLAY = {
   scenario: 'original',
   startMs: Date.parse('2025-03-13T00:00:00Z'),
   slipDays: PRESET_SLIP_DAYS,
+  horizonDeg: 0,
 };
 const ECLIPSE_LEAD_MIN = 3 * 60;
 const eclipseStay = () =>
@@ -512,10 +532,10 @@ const slipStrip = createSlipStrip($('#slips'), {
 /** Hours for every slip at this site and touchdown. The cells for slip 0 and the chosen slip come from the pair on screen. */
 function renderSlips(p, site) {
   if (!eph) return;
-  const key = `${site.id}|${site.lat}|${site.lonE}|${state.startMs}`;
+  const key = `${site.id}|${site.lat}|${site.lonE}|${state.startMs}|${state.horizonDeg}`;
   if (!seriesCache.has(key)) {
     if (seriesCache.size >= MAX_CACHED_SERIES) seriesCache.clear();
-    seriesCache.set(key, slipSeries(eph, site, state.startMs, MAX_SLIP_DAYS));
+    seriesCache.set(key, slipSeries(eph, site, state.startMs, MAX_SLIP_DAYS, state.horizonDeg));
   }
   const cells = seriesCache.get(key).map((c) => {
     if (c.slipDays === 0) return slipCell(0, p.original);
@@ -551,7 +571,9 @@ function readoutHtml(sample, a, t) {
       const up = aboveAt(a, b, t);
       const covered = b === 'sun' && up ? eclipseAt(a, t) : null;
       const status = !up
-        ? '▼ Below horizon'
+        ? s.el > 0
+          ? '▼ Hidden by terrain margin'
+          : '▼ Below horizon'
         : covered === 'total'
           ? '▲ Above horizon, behind Earth'
           : covered === 'partial'
@@ -610,7 +632,7 @@ function setState(patch) {
   const next = { ...state, ...rest };
   next.elapsedMin = Math.min(Math.max(next.elapsedMin, 0), MAX_MIN);
   const site = siteIn(next);
-  if (!site || !pairFor(site, next.startMs, next.slipDays)) {
+  if (!site || !pairFor(site, next.startMs, next.slipDays, next.horizonDeg)) {
     // Only reachable before the Moon table has loaded.
     planMessage('Still loading the Moon table. Try again in a moment.', true);
     return;
@@ -631,6 +653,9 @@ function renderPlan(p, site) {
   $('#surf-site').textContent = `${site.name} · ${site.coordLabel}`;
   timelines.render([o, d]);
   renderSlips(p, site);
+  document.querySelectorAll('.model-tag').forEach((tag) => {
+    tag.textContent = state.horizonDeg > 0 ? `Terrain margin ${state.horizonDeg}°` : 'Smooth-horizon estimate';
+  });
 
   $('#slip-words').textContent = slipWords(state.slipDays);
   $('#td-original-date').textContent = fmtDay(o.start, { year: true });
@@ -682,6 +707,11 @@ function render({ transition, quiet } = {}) {
     // Keep the group reachable by Tab when a non-featured site is active.
     b.tabIndex = on || (!site.featured && i === 0) ? 0 : -1;
   });
+  marginPicker.querySelectorAll('[data-margin]').forEach((b) => {
+    const on = Number(b.dataset.margin) === state.horizonDeg;
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
   document.querySelectorAll('#scn-switch [data-scenario]').forEach((b) => {
     const on = b.dataset.scenario === state.scenario;
     b.setAttribute('aria-checked', String(on));
@@ -709,7 +739,13 @@ function render({ transition, quiet } = {}) {
   $('#surf-t').textContent = `${hud} · ${fmtUtc(t)}`;
   const sUp = aboveAt(a, 'sun', t), eUp = aboveAt(a, 'earth', t);
   const sunHidden = sUp && eclipseAt(a, t) === 'total';
-  const darkNote = !sUp ? 'Modeled darkness' : sunHidden ? 'Sun behind Earth' : '';
+  const darkNote = !sUp
+    ? sample.sun.el > 0
+      ? 'Sun hidden by terrain margin'
+      : 'Modeled darkness'
+    : sunHidden
+      ? 'Sun behind Earth'
+      : '';
   $('#surf-state').innerHTML = `<span class="st ${sUp ? 'on' : ''}">${icon('sun')}Sun ${sUp ? 'up' : 'down'}</span><span class="st ${eUp ? 'on' : ''}">${icon('earth')}Earth ${eUp ? 'up' : 'down'}</span>${darkNote ? `<span class="st-dark">${darkNote}</span>` : ''}`;
   slipStrip.update({ slipDays: state.slipDays, scenario: state.scenario });
 

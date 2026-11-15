@@ -151,6 +151,13 @@
                   <input type="range" id="slip-range" min="1" max="30" step="1" value="9" disabled />
                 </label>
               </div>
+              <div class="plan-margin">
+                <span class="plan-k" id="margin-k">Terrain margin</span>
+                <div class="margin-row">
+                  <div class="seg" role="radiogroup" aria-labelledby="margin-k" aria-describedby="margin-help" id="margin-picker"></div>
+                  <p class="margin-help" id="margin-help">Treat the lowest few degrees of sky as blocked by ridges and crater rims. Every number below reruns.</p>
+                </div>
+              </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
                 <button type="button" class="link-btn" id="plan-reset" hidden>Reset to Mar 15, 2025 and 9 days</button>
@@ -339,6 +346,9 @@
               On polar terrain, nearby ridges can materially change both windows. When Earth fully covers the Sun
               (a lunar eclipse seen from the surface), that time is counted as no sunlight. Partial cover is marked
               on the timeline and still counted as sunlight.
+              The terrain margin raises the line that counts as the horizon to 1, 2 or 5 degrees, as a
+              stand-in for ridges and crater rims. It is the same in every direction around the site, so it
+              is a what-if, not a measured horizon.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
             </p>
           </div>
