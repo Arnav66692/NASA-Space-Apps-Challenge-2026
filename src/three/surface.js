@@ -8,7 +8,7 @@ import { regolithTexture, glowTexture, starfield, rng } from './textures.js';
 import { azElToLocal, renderLoop, easeInOut } from './geo.js';
 import { fitSurfaceCamera, fitOverhead, poseBasis, FIT } from './surfaceFrame.js';
 import { fmtDeg } from '../format.js';
-import { detailedGround, regolithNormal, scatterRocks, landerMaterials, sunDisc, milkyWay, earthShader, createPost } from './surfaceLook.js';
+import { detailedGround, regolithNormal, scatterRocks, sunDisc, milkyWay, earthShader, createPost, buildDetailedLander, realLanderMaterials, studioLanderMaterials, applyLanderMaterials } from './surfaceLook.js';
 
 const SKY_R = 1400;
 const GROUND_R = 1100;
@@ -268,7 +268,9 @@ export function createSurface(container) {
   }
 
   // Lander
-  const { group: lander, dish } = buildLander(landerMaterials(renderer));
+  // Two looks for the lander and its ground: 'real' and the soft 'studio' clay of the site's style.
+  const LANDER_LOOKS = { real: realLanderMaterials(renderer), studio: studioLanderMaterials(renderer) };
+  const { group: lander, dish } = buildDetailedLander(LANDER_LOOKS.real);
   scene.add(lander);
 
   // Lights
@@ -722,6 +724,7 @@ export function createSurface(container) {
   }
 
   let lastView = null;
+  let studioFill = 0; // the studio look lifts the shadows like a soft-box
   let closeLower = null;
 
   /**
@@ -787,7 +790,7 @@ export function createSurface(container) {
     const earthUp = THREE.MathUtils.smoothstep(sample.earth.el, -0.95, 0.95);
     earthLight.intensity = 0.95 * k * earthUp * (1 - sunUp * 0.85);
     earthLight.position.copy(eDir).multiplyScalar(160);
-    ambient.intensity = 0.16 + 0.2 * sunUp;
+    ambient.intensity = 0.16 + 0.2 * sunUp + 0.55 * studioFill;
     // Sunlit regolith throws light back up onto the lander's shadow side; the
     // higher the Sun, the brighter the ground and the stronger that bounce.
     const bounce = sunUp * Math.sin(THREE.MathUtils.degToRad(Math.max(sample.sun.el, 0)));
@@ -798,9 +801,29 @@ export function createSurface(container) {
     loop.invalidate();
   }
 
+  /** Switch the lander, the ground and the fill light between the real and studio looks. */
+  const groundLook = { real: { color: 0x9a968f, normal: 0.5, rock: 0x96938c }, studio: { color: 0xd9d1c8, normal: 0.12, rock: 0xd2cac1 } };
+  const rocks = scene.children.find((o) => o.isGroup && o.children.some((c) => c.isInstancedMesh));
+  let look = 'real';
+  function setLook(next) {
+    if (!LANDER_LOOKS[next] || next === look) return;
+    look = next;
+    applyLanderMaterials(lander, LANDER_LOOKS[next]);
+    const g = groundLook[next];
+    groundMat.color.set(g.color);
+    groundMat.normalScale.set(g.normal, g.normal);
+    if (rocks) for (const m of rocks.children) {
+      m.material.color.set(g.rock);
+      m.material.normalScale.set(g.normal * 0.7, g.normal * 0.7);
+    }
+    studioFill = next === 'studio' ? 1 : 0;
+    if (lastSample) update({ viewKey: lastView, sample: lastSample });
+    loop.invalidate();
+  }
+
   new ResizeObserver(resize).observe(container);
   resize();
-  return { update };
+  return { update, setLook };
 }
 
 function svgIcon(d) {

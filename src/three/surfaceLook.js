@@ -404,3 +404,196 @@ export function createPost(renderer, scene, camera) {
     },
   };
 }
+
+// ───────────── A detailed lander, in two looks ─────────────
+
+/** Studio materials: plaster white, satin gold, soft lilac cells, the clean look of the site's unseen style. */
+export function studioLanderMaterials(renderer) {
+  const envMap = lunarEnvironment(renderer);
+  return {
+    foil: new THREE.MeshStandardMaterial({ color: 0xefe9e1, roughness: 0.72, envMap, envMapIntensity: 0.45 }),
+    silver: new THREE.MeshStandardMaterial({ color: 0xd9b46a, metalness: 0.6, roughness: 0.38, envMap, envMapIntensity: 1.2 }),
+    kapton: new THREE.MeshStandardMaterial({ color: 0x6f6878, roughness: 0.7 }),
+    white: new THREE.MeshStandardMaterial({ color: 0xf3efea, roughness: 0.85, envMap, envMapIntensity: 0.4 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x5d5a63, roughness: 0.7, envMap, envMapIntensity: 0.4 }),
+    panel: new THREE.MeshStandardMaterial({ color: 0xb8b2cc, roughness: 0.4, metalness: 0.2, envMap, envMapIntensity: 0.9 }),
+    dish: new THREE.MeshStandardMaterial({ color: 0xf3efea, roughness: 0.7, side: THREE.DoubleSide, envMap, envMapIntensity: 0.4 }),
+    nozzle: new THREE.MeshStandardMaterial({ color: 0x7a7480, roughness: 0.55, metalness: 0.3, side: THREE.DoubleSide, envMap, envMapIntensity: 0.6 }),
+    lens: new THREE.MeshStandardMaterial({ color: 0x3a3842, roughness: 0.2, metalness: 0.4 }),
+  };
+}
+
+/** Real materials, extending landerMaterials with the extra parts the detailed build uses. */
+export function realLanderMaterials(renderer) {
+  const base = landerMaterials(renderer);
+  const envMap = base.foil.envMap;
+  return {
+    ...base,
+    silver: new THREE.MeshStandardMaterial({ color: 0xc7cbd1, metalness: 1, roughness: 0.24, normalMap: base.foil.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), envMap, envMapIntensity: 1.2 }),
+    kapton: new THREE.MeshStandardMaterial({ color: 0x2a2116, metalness: 0.3, roughness: 0.32, envMap, envMapIntensity: 0.9 }),
+    nozzle: new THREE.MeshStandardMaterial({ color: 0x3b3a3c, metalness: 0.85, roughness: 0.38, side: THREE.DoubleSide, envMap, envMapIntensity: 1.1 }),
+    lens: new THREE.MeshStandardMaterial({ color: 0x05070c, metalness: 0.2, roughness: 0.05, envMap, envMapIntensity: 1.5 }),
+  };
+}
+
+/**
+ * A lander about 4 m tall, close in layout to the hexagonal landers of 2024 and 2025: a foil body with
+ * taped seams, black radiators, body-mounted solar cells, an engine bell with thruster pods, four
+ * shock-absorbing legs on dish feet, a star tracker, whip antennas and a dish aimed at Earth.
+ * Every mesh carries userData.part so the look can switch materials later.
+ */
+export function buildDetailedLander(mats) {
+  const L = new THREE.Group();
+  const add = (geo, part, parent = L) => {
+    const m = new THREE.Mesh(geo, mats[part]);
+    m.userData.part = part;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  };
+  const HEX_R = 1.05, BODY_H = 1.55, BODY_Y = 1.62;
+  // Body: a hexagonal prism in gold foil, a silver upper band, white deck.
+  const body = add(new THREE.CylinderGeometry(HEX_R, HEX_R, BODY_H, 6), 'foil');
+  body.position.y = BODY_Y;
+  body.rotation.y = Math.PI / 6;
+  const band = add(new THREE.CylinderGeometry(HEX_R + 0.01, HEX_R + 0.01, 0.32, 6), 'silver');
+  band.position.y = BODY_Y + BODY_H / 2 - 0.16;
+  band.rotation.y = Math.PI / 6;
+  const deck = add(new THREE.CylinderGeometry(HEX_R + 0.06, HEX_R + 0.06, 0.07, 6), 'white');
+  deck.position.y = BODY_Y + BODY_H / 2 + 0.035;
+  deck.rotation.y = Math.PI / 6;
+  const floor = add(new THREE.CylinderGeometry(HEX_R + 0.04, HEX_R - 0.1, 0.12, 6), 'kapton');
+  floor.position.y = BODY_Y - BODY_H / 2 - 0.06;
+  floor.rotation.y = Math.PI / 6;
+  // Taped seams down each corner, and the faces they frame.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const seam = add(new THREE.BoxGeometry(0.05, BODY_H, 0.05), 'silver');
+    seam.position.set(Math.cos(a) * HEX_R, BODY_Y, Math.sin(a) * HEX_R);
+    const fa = a + Math.PI / 6; // face centre
+    const apothem = HEX_R * Math.cos(Math.PI / 6) + 0.012;
+    const face = new THREE.Group();
+    face.position.set(Math.cos(fa) * apothem, BODY_Y, Math.sin(fa) * apothem);
+    face.rotation.y = -fa + Math.PI / 2;
+    L.add(face);
+    if (i % 3 === 0) {
+      // Body-mounted solar cells on two faces.
+      const cells = add(new THREE.BoxGeometry(0.92, 0.9, 0.02), 'panel', face);
+      cells.position.y = -0.1;
+    } else if (i % 3 === 1) {
+      // A black radiator with ribs.
+      const rad = add(new THREE.BoxGeometry(0.7, 0.75, 0.025), 'kapton', face);
+      rad.position.y = -0.15;
+      for (let k = -2; k <= 2; k++) {
+        const rib = add(new THREE.BoxGeometry(0.015, 0.75, 0.03), 'silver', face);
+        rib.position.set(k * 0.14, -0.15, 0.02);
+      }
+    }
+  }
+  // Engine: a bell under the floor, and four thruster pods on the lower corners.
+  const bellProfile = [];
+  for (let i = 0; i <= 14; i++) {
+    const t = i / 14;
+    bellProfile.push(new THREE.Vector2(0.14 + 0.28 * Math.pow(t, 1.6), -t * 0.55));
+  }
+  const bell = add(new THREE.LatheGeometry(bellProfile, 40), 'nozzle');
+  bell.position.y = BODY_Y - BODY_H / 2 - 0.12;
+  const throat = add(new THREE.CylinderGeometry(0.2, 0.14, 0.14, 24), 'dark');
+  throat.position.y = BODY_Y - BODY_H / 2 - 0.08;
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const pod = add(new THREE.BoxGeometry(0.16, 0.16, 0.16), 'silver');
+    pod.position.set(Math.cos(a) * (HEX_R - 0.05), BODY_Y - BODY_H / 2 + 0.15, Math.sin(a) * (HEX_R - 0.05));
+    for (let k = 0; k < 3; k++) {
+      const jet = add(new THREE.ConeGeometry(0.035, 0.09, 12, 1, true), 'nozzle');
+      const dir = [new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)), new THREE.Vector3(0, -1, 0)][k];
+      jet.position.copy(pod.position).addScaledVector(dir, 0.11);
+      jet.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+    }
+  }
+  // Legs: an outer tube, a polished shock absorber sliding out of it, two side struts, a dish foot.
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const top = new THREE.Vector3(Math.cos(a) * (HEX_R - 0.1), BODY_Y - 0.25, Math.sin(a) * (HEX_R - 0.1));
+    const foot = new THREE.Vector3(Math.cos(a) * 2.15, 0.12, Math.sin(a) * 2.15);
+    const along = foot.clone().sub(top);
+    const len = along.length();
+    const dir = along.clone().normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const tube = add(new THREE.CylinderGeometry(0.06, 0.06, len * 0.62, 12), 'white');
+    tube.position.copy(top).addScaledVector(dir, len * 0.31);
+    tube.quaternion.setFromUnitVectors(up, dir);
+    const piston = add(new THREE.CylinderGeometry(0.035, 0.035, len * 0.42, 12), 'silver');
+    piston.position.copy(top).addScaledVector(dir, len * 0.79);
+    piston.quaternion.setFromUnitVectors(up, dir);
+    for (const side of [-1, 1]) {
+      const anchor = new THREE.Vector3(Math.cos(a + side * 0.42) * (HEX_R - 0.05), BODY_Y - BODY_H / 2 + 0.05, Math.sin(a + side * 0.42) * (HEX_R - 0.05));
+      const mid = top.clone().lerp(foot, 0.58);
+      const strut = add(new THREE.CylinderGeometry(0.025, 0.025, mid.distanceTo(anchor), 8), 'white');
+      strut.position.copy(mid).add(anchor).multiplyScalar(0.5);
+      strut.quaternion.setFromUnitVectors(up, anchor.clone().sub(mid).normalize());
+    }
+    const padProfile = [new THREE.Vector2(0, -0.04), new THREE.Vector2(0.24, -0.02), new THREE.Vector2(0.3, 0.05), new THREE.Vector2(0.28, 0.07)];
+    const pad = add(new THREE.LatheGeometry(padProfile, 28), 'foil');
+    pad.position.copy(foot).setY(0.07);
+  }
+  // Deck: two propellant tanks under silver blankets, a star tracker, whip antennas, a camera mast.
+  const deckY = BODY_Y + BODY_H / 2 + 0.07;
+  for (const x of [-0.42, 0.42]) {
+    const tank = add(new THREE.SphereGeometry(0.3, 28, 18), 'silver');
+    tank.position.set(x, deckY + 0.2, 0.32);
+    tank.scale.y = 0.8;
+  }
+  const tracker = add(new THREE.BoxGeometry(0.22, 0.18, 0.22), 'dark');
+  tracker.position.set(0.55, deckY + 0.09, -0.45);
+  const baffle = add(new THREE.CylinderGeometry(0.07, 0.05, 0.18, 16, 1, true), 'dark');
+  baffle.position.set(0.55, deckY + 0.26, -0.45);
+  baffle.rotation.x = -0.5;
+  const lens = add(new THREE.CircleGeometry(0.05, 16), 'lens');
+  lens.position.set(0.55, deckY + 0.31, -0.49);
+  lens.rotation.x = -0.5 - Math.PI / 2;
+  for (const [x, z, h] of [[-0.85, 0.2, 0.9], [0.2, 0.85, 0.7]]) {
+    const whip = add(new THREE.CylinderGeometry(0.008, 0.008, h, 6), 'white');
+    whip.position.set(x, deckY + h / 2, z);
+  }
+  const camMast = add(new THREE.CylinderGeometry(0.025, 0.025, 0.6, 8), 'white');
+  camMast.position.set(-0.1, deckY + 0.3, -0.75);
+  const cam = add(new THREE.BoxGeometry(0.16, 0.1, 0.12), 'dark');
+  cam.position.set(-0.1, deckY + 0.62, -0.75);
+  // Solar wing on a short arm.
+  const wing = new THREE.Group();
+  add(new THREE.BoxGeometry(1.8, 0.035, 0.95), 'panel', wing).position.x = 1.15;
+  const frame = add(new THREE.BoxGeometry(1.84, 0.02, 0.99), 'silver', wing);
+  frame.position.set(1.15, -0.03, 0);
+  const arm = add(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), 'white', wing);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.x = 0.2;
+  wing.position.set(HEX_R - 0.05, deckY - 0.25, -0.15);
+  wing.rotation.z = 0.32;
+  L.add(wing);
+  // Dish on a mast, re-aimed at Earth every update by surface.js.
+  const mast = add(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 10), 'white');
+  mast.position.set(-0.5, deckY + 0.45, -0.3);
+  const dish = new THREE.Group();
+  const prof = [];
+  for (let i = 0; i <= 14; i++) {
+    const x = (i / 14) * 0.45;
+    prof.push(new THREE.Vector2(x, x * x * 1.15));
+  }
+  const bowl = add(new THREE.LatheGeometry(prof, 40), 'dish', dish);
+  bowl.rotation.x = Math.PI / 2; // the lathe axis +y becomes +z, so the dish opens toward +z
+  const feed = add(new THREE.CylinderGeometry(0.012, 0.012, 0.34, 6), 'dark', dish);
+  feed.rotation.x = Math.PI / 2;
+  feed.position.z = 0.17;
+  dish.position.set(-0.5, deckY + 0.95, -0.3);
+  L.add(dish);
+  return { group: L, dish };
+}
+
+/** Re-skin every lander part with a material set. */
+export function applyLanderMaterials(group, mats) {
+  group.traverse((o) => {
+    if (o.isMesh && o.userData.part && mats[o.userData.part]) o.material = mats[o.userData.part];
+  });
+}

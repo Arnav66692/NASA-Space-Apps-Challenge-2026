@@ -7,12 +7,13 @@ Source: NASA's Scientific Visualization Studio, CGI Moon Kit, https://svs.gsfc.n
 Put both files in data/raw/moon/ (not tracked), then run from the repo root:
   uv run --with numpy --with pillow python tools/build_moon_maps.py
 
-Writes src/three/moon/moon-color.webp and src/three/moon/moon-relief.webp.
+Writes src/three/moon/moon-color.webp, moon-relief.webp, and moon-height.webp with moon-height.json.
 The relief file is a tangent-space normal map: red is the slope toward east, green toward north.
 Slopes are multiplied by RELIEF_GAIN before they are stored, so gentle lunar terrain survives
 8-bit storage. The globe sets the final strength.
 Written with an AI tool (Claude).
 """
+import json
 from pathlib import Path
 
 import numpy as np
@@ -72,9 +73,26 @@ def build_relief() -> Path:
     return path
 
 
+HEIGHT_SIZE = (2048, 1024)
+
+
+def build_height() -> Path:
+    """Grayscale height map for the globe's silhouette, with its range in metres beside it."""
+    raw = Image.open(RAW / "ldem_16_uint.tif")
+    metres = np.asarray(raw, dtype=np.float32) * HALF_METRE + (1727400.0 - MOON_RADIUS_M)
+    h = np.asarray(Image.fromarray(metres, mode="F").resize(HEIGHT_SIZE, Image.LANCZOS), dtype=np.float32)
+    lo, hi = float(h.min()), float(h.max())
+    grey = np.round((h - lo) / (hi - lo) * 255).astype(np.uint8)
+    path = OUT / "moon-height.webp"
+    Image.fromarray(grey, mode="L").save(path, "WEBP", quality=90, method=6)
+    (OUT / "moon-height.json").write_text(json.dumps({"minM": round(lo, 1), "maxM": round(hi, 1), "radiusM": MOON_RADIUS_M}) + "\n")
+    print(f"height: {lo:.0f} m to {hi:.0f} m relative to {MOON_RADIUS_M:.0f} m")
+    return path
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    for path in (build_color(), build_relief()):
+    for path in (build_color(), build_relief(), build_height()):
         print(f"{path}  {path.stat().st_size / 1e6:.2f} MB  {Image.open(path).size}")
 
 

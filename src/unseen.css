@@ -660,3 +660,17 @@ html[data-page="home"] .globe-wrap.will-reveal { opacity: 1; transform: none; tr
 @media (max-width: 640px) {
   .margin-row .seg { flex: 1 1 100%; }
 }
+
+/* The open list of a select is drawn by the browser. On Windows it is a white panel, and the
+   options inherited the page's light text, so they vanished. Give the options their own colours. */
+select option, select optgroup { background-color: #141414; color: #f1edeb; }
+select option:checked { background-color: #2a2a2a; color: #fff; }
+select option:disabled { color: #8d8986; }
+
+/* ───────────── Real or Studio switch for the 3D views ───────────── */
+.look-switch { padding: 0.25rem; gap: 0.15rem; }
+.look-switch button { padding: 0.3rem 0.8rem; font-size: 0.78rem; }
+.globe-wrap figcaption .look-switch { order: -1; margin-right: 0.6rem; }
+.surface-wrap > .look-switch { position: absolute; z-index: 3; right: 12px; bottom: 132px; background: rgb(20 20 20 / 0.85); }
+.no-3d .look-switch { display: none; }
+@media (max-width: 640px) { .surface-wrap > .look-switch { bottom: 16px; right: auto; left: 50%; transform: translateX(-50%); } }

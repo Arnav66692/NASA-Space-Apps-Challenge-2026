@@ -6,18 +6,20 @@
 import * as THREE from 'three';
 import colorUrl from './moon/moon-color.webp?url';
 import reliefUrl from './moon/moon-relief.webp?url';
+import heightUrl from './moon/moon-height.webp?url';
+import heightRange from './moon/moon-height.json';
 
 /**
  * @param {THREE.WebGLRenderer} renderer
- * @returns {Promise<{map: THREE.Texture, normalMap: THREE.Texture}>}
+ * @returns {Promise<{map: THREE.Texture, normalMap: THREE.Texture, heightMap: THREE.Texture, heightRange: {minM: number, maxM: number, radiusM: number}}>}
  */
 export async function loadMoonMaps(renderer) {
   const loader = new THREE.TextureLoader();
-  const [map, normalMap] = await Promise.all([loader.loadAsync(colorUrl), loader.loadAsync(reliefUrl)]);
+  const [map, normalMap, heightMap] = await Promise.all([loader.loadAsync(colorUrl), loader.loadAsync(reliefUrl), loader.loadAsync(heightUrl)]);
   map.colorSpace = THREE.SRGBColorSpace;
-  for (const texture of [map, normalMap]) {
+  for (const texture of [map, normalMap, heightMap]) {
     texture.wrapS = THREE.RepeatWrapping;
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   }
-  return { map, normalMap };
+  return { map, normalMap, heightMap, heightRange };
 }

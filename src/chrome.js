@@ -128,7 +128,9 @@ export function initChrome() {
   });
   window.addEventListener('popstate', () => {
     const id = window.location.hash.slice(1);
-    go(id || (window.location.search.length > 1 ? 'navigator' : 'home'), { push: false });
+    const plan = new URLSearchParams(window.location.search);
+    plan.delete('look');
+    go(id || ([...plan.keys()].length ? 'navigator' : 'home'), { push: false });
   });
 
   // On the navigator the header steps away on the way down and returns on the way up.

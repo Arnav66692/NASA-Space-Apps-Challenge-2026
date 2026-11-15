@@ -132,6 +132,10 @@ The look follows [unseen.co](https://unseen.co): a one-screen home over a live 3
 
 The globe is the real Moon. Its colour is NASA's LRO Camera mosaic and its relief is made from LOLA laser altimeter elevation, both from the [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/) by NASA's Scientific Visualization Studio. `tools/build_moon_maps.py` builds the two textures in `src/three/moon/` from the kit's files. Relief is drawn about three times steeper than it is. Sunlight on the globe is added in the shader from the JPL Sun direction, and ground past the day and night line stays dark whatever its slope.
 
+The globe is shaded the way the real Moon reflects light (Lommel-Seeliger blended with plain matte shading), which keeps a full Moon bright to its edge. Its silhouette carries real mountains from the LOLA heights, drawn three times taller, and the night side gets earthshine that follows Earth's phase as seen from the Moon.
+
+A Real or Studio switch beside the globe and the lander view changes the look of both. Real aims for a photograph. Studio is a pale pearl Moon with a soft wrapped light and a pastel rim, a plaster-white lander with gold accents, and clay-coloured ground, in the site's unseen style. The data, the Sun and Earth positions and the camera are the same in both. `?look=studio` opens it directly.
+
 The home screen is the same globe seen from its night side, so the sunlit part is a crescent across the top. It is exposed brighter than the navigator's globe and has a soft fill light so the night side is not pure black.
 
 Check done: with Blue Ghost selected on Mar 6, 2025, the pin sits on Mare Crisium and the east half of the near side is lit, which matches a first quarter Moon.

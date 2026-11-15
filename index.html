@@ -14,7 +14,8 @@
       (function () {
         var d = document.documentElement;
         var h = location.hash.slice(1);
-        var tool = ['navigator', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && location.search.length > 1);
+        var q = location.search.replace(/^\?/, '').split('&').filter(function (p) { return p && p.indexOf('look=') !== 0; });
+        var tool = ['navigator', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && q.length > 0);
         d.dataset.page = tool ? 'tool' : 'home';
         d.classList.add('js');
         if (!tool && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('intro-on', 'entering');
@@ -207,6 +208,7 @@
           <figcaption id="globe-cap">
             <span class="lg"><i class="sw sw-term"></i>Sunrise / sunset line</span>
             <span class="lg"><i class="sw sw-limb"></i>Earth on the horizon</span>
+            <div class="seg look-switch" role="radiogroup" aria-label="Look of the 3D views" data-look-switch></div>
             <span class="lg-note">Drag to rotate. Lighting from JPL Sun direction at the selected instant.</span>
           </figcaption>
         </figure>
@@ -228,6 +230,7 @@
           <h3 id="sky-h" class="sr">Sky at the selected instant</h3>
           <figure class="surface-wrap">
             <div class="surface" id="surface" role="img" aria-label="3D view of the landing site"></div>
+            <div class="seg look-switch" role="radiogroup" aria-label="Look of the 3D views" data-look-switch data-look-surface></div>
             <div class="surface-hud">
               <span class="hud-site" id="surf-site"></span>
               <span class="hud-t num" id="surf-t"></span>

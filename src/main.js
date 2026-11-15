@@ -829,6 +829,49 @@ new ResizeObserver(() => {
   }, 120);
 }).observe($('#strip'));
 
+// ───────────── Look of the 3D views: 'real' (photographic) or 'studio' (soft, in the site's style) ─────────────
+const LOOK_KEY = 'long-shadow-look';
+const LOOK_NAMES = { real: 'Real', studio: 'Studio' };
+let look = 'real';
+try {
+  look = localStorage.getItem(LOOK_KEY) || 'real';
+} catch {
+  // Storage refused. The default look stands.
+}
+const urlLook = new URLSearchParams(window.location.search).get('look');
+if (urlLook && LOOK_NAMES[urlLook]) look = urlLook;
+if (!LOOK_NAMES[look]) look = 'real';
+const lookSwitches = [...document.querySelectorAll('[data-look-switch]')];
+for (const el of lookSwitches) {
+  el.innerHTML = Object.entries(LOOK_NAMES)
+    .map(([id, name]) => `<button type="button" role="radio" data-look="${id}" aria-checked="false"><span class="sp-name">${name}</span></button>`)
+    .join('');
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-look]');
+    if (b) setLook(b.dataset.look, true);
+  });
+  radioKeys(el, '[data-look]', (b) => setLook(b.dataset.look, true));
+}
+function setLook(next, save = false) {
+  if (!LOOK_NAMES[next]) return;
+  look = next;
+  for (const b of document.querySelectorAll('[data-look]')) {
+    const on = b.dataset.look === look;
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
+  }
+  globe?.setLook?.(look);
+  surface?.setLook?.(look);
+  if (save) {
+    try {
+      localStorage.setItem(LOOK_KEY, look);
+    } catch {
+      // Storage refused. The look still changes for this visit.
+    }
+  }
+}
+setLook(look);
+
 // ───────────── 3D (lazy, optional) ─────────────
 function webglOk() {
   try {
@@ -846,6 +889,7 @@ if (webglOk()) {
       chrome.setGlobe(globe);
       surface = s.createSurface($('#surface'));
       document.body.classList.add('has-3d');
+      setLook(look);
       render({ quiet: true });
     })
     .catch((err) => {
