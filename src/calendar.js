@@ -2,7 +2,7 @@
 // the Moon table covers, drawn as a calendar. A cell holds the longest unbroken stretch with the
 // Sun and Earth both up. The numbers come from analyzeStay and the go marks from meetsNeed, so a
 // cell cannot disagree with the plan above it.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import './calendar.css';
 import { HOUR_MS } from './calc.js';
 import { WINDOW_HOURS } from './window.js';

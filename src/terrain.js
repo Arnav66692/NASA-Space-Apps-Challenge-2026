@@ -1,7 +1,7 @@
 // Terrain horizons for the built-in landing sites, from NASA LOLA elevation (16 pixels per degree).
 // Built by tools/build_terrain.py. Each profile is 360 elevation angles in degrees, one per degree of
 // azimuth clockwise from north. Custom points have no profile, so they stay on the smooth horizon.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import TERRAIN from '../data/terrain-horizons.json';
 
 export const TERRAIN_META = TERRAIN.meta;

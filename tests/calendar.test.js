@@ -1,4 +1,4 @@
-// Checks for the landing calendar. Written with an AI tool (Claude).
+// Checks for the landing calendar. Written with an AI tool.
 // Bars set before the first run (Nov 15 2026, 7:45 PM PT): every sampled cell equals analyzeStay
 // exactly, the day list starts and ends where the Moon table allows a full 72 hour stay, and the
 // go marks equal meetsNeed for every need choice.

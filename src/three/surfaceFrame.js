@@ -3,7 +3,7 @@
 // the frame is lens-shifted upward (the lander moves into the lower part of the
 // picture, verticals stay vertical) and the field of view widens only as far as
 // the sky needs. Pure math (no three.js) so it can be checked in Node.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 
 const D2R = Math.PI / 180;
 

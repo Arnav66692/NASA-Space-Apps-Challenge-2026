@@ -1,4 +1,4 @@
-// Checks for the mission need, the site comparison and the CSV. Written with an AI tool (Claude).
+// Checks for the mission need, the site comparison and the CSV. Written with an AI tool.
 // Bars set before the first run (Nov 15 2026, 3:55 PM PT): every number in the site table and the
 // CSV equals the analysis it came from exactly, and the verdict is exact at the threshold.
 import { describe, it, expect } from 'vitest';

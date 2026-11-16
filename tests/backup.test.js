@@ -1,4 +1,4 @@
-// Checks for the continuous-window metrics and the backup-window finder. Written with an AI tool (Claude).
+// Checks for the continuous-window metrics and the backup-window finder. Written with an AI tool.
 // The preset expectations follow from the reference totals in docs/HANDOFF.md: each preset stay has at
 // most one stretch per body, so the longest stretch equals the total and the gaps are 72 h minus it.
 import { describe, it, expect } from 'vitest';

@@ -18,7 +18,7 @@ Put ldem_16_uint.tif in data/raw/moon/ (not tracked), then run from the repo roo
   uv run --offline --with numpy --with pillow python tools/build_terrain_grid.py
 
 Writes data/terrain-grid.bin.
-Written with an AI tool (Claude).
+Written with an AI tool.
 """
 import json
 import struct

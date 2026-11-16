@@ -5,7 +5,7 @@
 // or key press on the page. It goes quiet while the tab is hidden.
 // The earlier version rendered a whole minute of music offline before it made any sound (about 8 s in
 // headless Chrome next to the 3D scene), so a click looked like it did nothing. This one plays at once.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import './sound.css';
 
 export const KEY = 'long-shadow-sound';

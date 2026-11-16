@@ -4,7 +4,7 @@
 // low-precision lunar theory of Meeus, Astronomical Algorithms, chapter 47
 // (truncated ELP-2000/82 series), plus nutation and sidereal time. No data
 // files and no network calls. Checked against JPL Horizons in tests/dsn.test.js.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import './dsn.css';
 import { intersect, mergeIntervals, sumHours, HOUR_MS } from './calc.js';
 import { fmtHours } from './format.js';

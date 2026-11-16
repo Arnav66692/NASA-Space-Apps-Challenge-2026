@@ -1,6 +1,6 @@
 /* Additions on top of unseen.css: the backup finder, unbroken stretches, easier timelines,
    loading placeholders for the 3D views, and the phone order. Kept in one file so it merges cleanly.
-   Written with an AI tool (Claude). */
+   Written with an AI tool. */
 
 /* ───────────── Touchdown picker ─────────────
    Replaces the browser's date-time pop-up. Same parts as the rest of the page: hairlines on near-black,

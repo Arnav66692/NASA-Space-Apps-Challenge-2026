@@ -1,4 +1,4 @@
-/* Heatmap toggle and legend on the 3D globe. Written with an AI tool (Claude). */
+/* Heatmap toggle and legend on the 3D globe. Written with an AI tool. */
 .globe-wrap figcaption .heat-switch { order: -1; margin-right: 0.6rem; padding: 0.25rem; }
 .heat-switch button { padding: 0.3rem 0.8rem; font-size: 0.78rem; }
 .heat-switch button::before {

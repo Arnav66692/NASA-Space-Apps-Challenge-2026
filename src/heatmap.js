@@ -2,7 +2,7 @@
 // same 72 hour analysis as the chosen site (analyzeStay), and keeps the longest unbroken stretch
 // with the Sun and Earth both up. The grid math is pure, so the tests run it in Node. The part at
 // the bottom drives the globe toggle and runs the grid in small slices so the page never freezes.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { analyzeStay } from './slips.js';
 import { WINDOW_HOURS } from './window.js';
 import terrainGridUrl from '../data/terrain-grid.bin?url';

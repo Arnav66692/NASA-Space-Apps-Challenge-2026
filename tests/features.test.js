@@ -1,4 +1,4 @@
-// Checks for the eclipse flag and the slip strip. Written with an AI tool (Claude).
+// Checks for the eclipse flag and the slip strip. Written with an AI tool.
 // Bars were fixed before the first run (research note C-winner-features, Nov 15 2026):
 // eclipse edges within 2 minutes of the pilot's 06:18 and 08:34 UTC, strip cells
 // within 0.2 h of the Horizons preset files.

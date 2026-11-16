@@ -1,4 +1,4 @@
-// Checks for the LOLA terrain horizon. Written with an AI tool (Claude).
+// Checks for the LOLA terrain horizon. Written with an AI tool.
 // Bars set before the first run (Nov 15 2026, 7:30 PM PT): with no profile the analysis is exactly the
 // smooth one, a flat profile of k degrees equals a k degree margin, a skyline only blocks the azimuths
 // it covers, and every built-in site has 360 finite values.

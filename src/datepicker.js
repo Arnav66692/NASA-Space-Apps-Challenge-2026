@@ -2,7 +2,7 @@
 // It replaces the browser's own date-time pop-up, which cannot be styled. The original
 // <input type="datetime-local"> stays in the page, hidden, as the single source of truth: the picker
 // writes its value and fires "change", so the plan logic in main.js is unchanged.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 
 const DAY_MS = 86_400_000;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

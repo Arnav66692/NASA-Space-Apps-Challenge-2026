@@ -2,7 +2,7 @@
    This file loads after styles.css and restyles it. Layout, type scale, components and motion follow
    measurements of unseen.co at 1440 by 900 (rem is 1vw, floor 14px). Code, fonts and assets are original.
    Inter and Newsreader (SIL OFL 1.1, licences in src/fonts/licenses) stand in for unseen's two faces.
-   Written with an AI tool (Claude). */
+   Written with an AI tool. */
 @font-face { font-family: "Inter Site"; src: url("./fonts/Inter-roman-latin-variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 @font-face { font-family: "Newsreader Site"; src: url("./fonts/Newsreader-roman-latin-variable.woff2") format("woff2"); font-weight: 200 800; font-style: normal; font-display: swap; }
 @font-face { font-family: "Newsreader Site"; src: url("./fonts/Newsreader-italic-latin-variable.woff2") format("woff2"); font-weight: 200 800; font-style: italic; font-display: swap; }

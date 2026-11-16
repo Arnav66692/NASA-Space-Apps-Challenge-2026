@@ -1,7 +1,7 @@
 // Any site, any date. Builds the hourly samples of a stay (73 for the default
 // 72 hours) from the bundled Moon table, in the same row shape the Horizons CSVs
 // parse to, so the calculation contract in calc.js runs unchanged on both.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { skyAt } from './moonsky.js';
 import { analyze } from './calc.js';
 import { eclipseIntervals } from './eclipse.js';

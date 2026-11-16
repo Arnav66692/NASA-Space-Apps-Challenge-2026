@@ -11,7 +11,7 @@ Writes src/three/moon/moon-color.webp, moon-relief.webp, and moon-height.webp wi
 The relief file is a tangent-space normal map: red is the slope toward east, green toward north.
 Slopes are multiplied by RELIEF_GAIN before they are stored, so gentle lunar terrain survives
 8-bit storage. The globe sets the final strength.
-Written with an AI tool (Claude).
+Written with an AI tool.
 """
 import json
 from pathlib import Path

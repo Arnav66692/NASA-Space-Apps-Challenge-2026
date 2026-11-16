@@ -1,6 +1,6 @@
 // Slip strip: one small cell per day of delay, 0 to 30, each with three bars
 // (Sun, Earth, both) on a shared 0 to 72 hour scale. Click a cell to set the slip.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { fmtHours, fmtDay, slipShort } from './format.js';
 import { icon } from './icons.js';
 

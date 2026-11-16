@@ -19,7 +19,7 @@ Put the file in data/raw/moon/ (not tracked), then run from the repo root:
   uv run --offline --with numpy --with pillow python tools/build_terrain.py
 
 Writes data/terrain-horizons.json.
-Written with an AI tool (Claude).
+Written with an AI tool.
 """
 import json
 import re

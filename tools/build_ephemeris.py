@@ -6,7 +6,7 @@ Each row holds six numbers:
   sub-Earth E longitude, sub-Earth latitude, sub-solar E longitude, sub-solar latitude (degrees),
   Sun to Moon distance (au), Earth to Moon distance (au).
 
-Written with an AI tool (Claude). Acknowledge in the SI field.
+Written with an AI tool. Acknowledge in the SI field.
 Run: python3 tools/build_ephemeris.py
 """
 import json

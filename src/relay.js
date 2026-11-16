@@ -3,7 +3,7 @@
 // works out how high the relay stands above the site's smooth horizon through the stay, and
 // shows the hours it is in view. Exact orbits are not public, so the numbers are a sketch.
 // The model assumes that the relay always sees Earth. That is true for the halo orbit by design.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 //
 // Sources for each number:
 // Queqiao (Chang'e 4, 2019): halo orbit around Earth-Moon L2, about 65,000 km from the Moon.

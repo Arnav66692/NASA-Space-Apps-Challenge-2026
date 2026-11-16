@@ -1,7 +1,7 @@
 // Every slip at a glance: the same 72 hour analysis, run once per day of delay.
 // Uses the same row builder and calculation contract as the main comparison, so
 // a cell and the table next to it cannot disagree.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { analyze, firstAtLeast, HOUR_MS } from './calc.js';
 import { buildRows, WINDOW_HOURS } from './window.js';
 import { eclipseIntervals } from './eclipse.js';

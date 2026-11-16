@@ -1,5 +1,5 @@
 // The where-to-land grid: same numbers as the per-site analysis, laid out the way the globe reads them.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

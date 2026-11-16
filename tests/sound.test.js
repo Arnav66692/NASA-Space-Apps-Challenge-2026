@@ -1,4 +1,4 @@
-// Checks for the ambient music settings. Written with an AI tool (Claude).
+// Checks for the ambient music settings. Written with an AI tool.
 // The sound itself is checked in a real browser, since Node has no Web Audio.
 import { describe, it, expect } from 'vitest';
 import { readChoice, CHORDS, KEY } from '../src/sound.js';

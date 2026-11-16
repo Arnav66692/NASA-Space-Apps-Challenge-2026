@@ -1,4 +1,4 @@
-// Checks for the stay length: 72 hours, 7 days, or a lunar day. Written with an AI tool (Claude).
+// Checks for the stay length: 72 hours, 7 days, or a lunar day. Written with an AI tool.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

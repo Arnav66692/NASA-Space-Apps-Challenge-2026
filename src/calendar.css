@@ -1,5 +1,5 @@
 /* Every date, this site. A calendar of the longest unbroken stretch with the Sun and Earth both up.
-   Written with an AI tool (Claude). */
+   Written with an AI tool. */
 .calendar { padding-top: 6.5rem; padding-bottom: 2rem; border-top: 1px solid var(--night-line); --cal-lo: #1b1a19; --cal-hi: #f2b33d; --cal-go: #8fe3b0; }
 html[data-page="home"] .calendar { display: none; }
 .cal-wrap { min-width: 0; }

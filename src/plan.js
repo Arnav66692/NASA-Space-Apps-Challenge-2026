@@ -1,6 +1,6 @@
 // Decisions on top of the numbers: does a stay meet the mission's need, how every site compares
 // on the same plan, and the plan as a CSV file. Pure functions, so they run in Node for the tests.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 
 // The need itself (the hour choices and the default) lives in slips.js with the backup finder,
 // so the verdict, the site table and the finder all ask the same question.

@@ -1,7 +1,7 @@
 // The parts that stay on screen: header, menu, corner controls and the cursor. Also the opening
 // and the switch between the two pages (the one-screen home and the navigator).
 // The behaviour follows unseen.co, measured for Arnav's portfolio build. The code is original.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 
 const TOOL_ANCHORS = ['navigator', 'sites', 'calendar', 'instrument', 'replay', 'methods', 'checks'];
 const LEAVE_MS = 480;

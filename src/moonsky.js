@@ -1,7 +1,7 @@
 // Where the Sun and Earth are in the sky at any point on the Moon, at any time.
 // Works in the browser and in Node. Reads the table built by tools/build_ephemeris.py.
 // Model: smooth sphere, site at altitude 0, no terrain.
-// Written with an AI tool (Claude). Acknowledge in the SI field.
+// Written with an AI tool. Acknowledge in the SI field.
 
 export const MOON_RADIUS_KM = 1737.4;
 export const EARTH_RADIUS_KM = 6378.137;

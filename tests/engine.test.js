@@ -1,5 +1,5 @@
 // Checks for the "any site, any date" engine: the bundled Moon table plus
-// moonsky.js, compared with direct JPL Horizons answers. Written with an AI tool (Claude).
+// moonsky.js, compared with direct JPL Horizons answers. Written with an AI tool.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
