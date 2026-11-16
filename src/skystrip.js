@@ -2,6 +2,7 @@
 // to the active window's actual range (always including 0°), so delayed Blue
 // Ghost's −71° Sun is on-scale; an off-scale arrow remains as a safeguard.
 import { fmtDeg } from './format.js';
+import { horizonAt } from './calc.js'; // ── terrain ──
 
 const NS = 'http://www.w3.org/2000/svg';
 const M = { l: 44, r: 14, t: 14, b: 26 };
@@ -35,6 +36,7 @@ export function createSkyStrip(root) {
     let [lo, hi] = a.elRange;
     lo = Math.min(lo, 0);
     hi = Math.max(hi, a.horizonDeg ?? 0, 0);
+    if (a.horizonProfile) hi = Math.max(hi, Math.max(...a.horizonProfile) + (a.horizonDeg ?? 0)); // ── terrain ──
     const span = Math.max(hi - lo, 4);
     const pad = span * 0.12;
     const step = niceStep(span + 2 * pad);
@@ -113,7 +115,19 @@ export function createSkyStrip(root) {
 
     // Terrain margin: the sky between the horizon and the blocked line counts as hidden.
     const margin = a.horizonDeg ?? 0;
-    if (margin > 0) {
+    // ── terrain ── the LOLA skyline (plus any margin) drawn as blocked sky, one point per degree of azimuth.
+    if (a.horizonProfile) {
+      const top = (az) => y(Math.min(Math.max(a.horizonProfile[az % 360] + margin, dom[0]), dom[1])).toFixed(1);
+      let d = `M${x(0).toFixed(1)},${y(Math.max(dom[0], Math.min(0, dom[1]))).toFixed(1)}`;
+      for (let az = 0; az <= 360; az += 1) d += `L${x(az).toFixed(1)},${top(az)}`;
+      d += `L${x(360).toFixed(1)},${y(Math.max(dom[0], Math.min(0, dom[1]))).toFixed(1)}Z`;
+      el('path', { d, class: 'blocked' }, svg);
+      let line = '';
+      for (let az = 0; az <= 360; az += 1) line += `${az ? 'L' : 'M'}${x(az).toFixed(1)},${top(az)}`;
+      el('path', { d: line, class: 'blocked-line', fill: 'none' }, svg);
+      const ml = el('text', { x: M.l + 5, y: M.t + 12, class: 'blocked-label', style: 'text-anchor: start' }, svg);
+      ml.textContent = margin > 0 ? `LOLA terrain skyline plus ${margin}°` : 'LOLA terrain skyline';
+    } else if (margin > 0) {
       el('rect', { x: M.l, y: y(margin), width: W - M.l - M.r, height: Math.max(0, y(0) - y(margin)), class: 'blocked' }, svg);
       el('line', { x1: M.l, x2: W - M.r, y1: y(margin), y2: y(margin), class: 'blocked-line' }, svg);
       const ml = el('text', { x: W - M.r - 5, y: y(margin) - 6, class: 'blocked-label' }, svg);
@@ -149,7 +163,8 @@ export function createSkyStrip(root) {
       m.label.setAttribute('x', flip ? -13 : 13);
       m.label.setAttribute('text-anchor', flip ? 'end' : 'start');
       m.label.textContent = `${body === 'sun' ? 'Sun' : 'Earth'} ${fmtDeg(e)}${offLow || offHigh ? ' (off scale)' : ''}`;
-      m.g.classList.toggle('below', e <= (analysis.horizonDeg ?? 0));
+      const line = (analysis.horizonDeg ?? 0) + (analysis.horizonProfile ? horizonAt(analysis.horizonProfile, az) : 0); // ── terrain ──
+      m.g.classList.toggle('below', e <= line);
     }
     // Keep labels from colliding when bodies are close (Athena).
     const sy = y(Math.min(Math.max(sample.sun.el, dom[0]), dom[1]));

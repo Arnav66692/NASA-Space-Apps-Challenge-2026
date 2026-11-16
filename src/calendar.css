@@ -1,0 +1,62 @@
+/* Every date, this site. A calendar of the longest unbroken stretch with the Sun and Earth both up.
+   Written with an AI tool (Claude). */
+.calendar { padding-top: 6.5rem; padding-bottom: 2rem; border-top: 1px solid var(--night-line); --cal-lo: #1b1a19; --cal-hi: #f2b33d; --cal-go: #8fe3b0; }
+html[data-page="home"] .calendar { display: none; }
+.cal-wrap { min-width: 0; }
+.cal-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; margin-bottom: 1.4rem; }
+.cal-years { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.cal-years button {
+  display: inline-flex; align-items: baseline; gap: 0.45rem; padding: 0.42rem 0.9rem; border: 0; border-radius: 180px;
+  background: transparent; color: var(--night-3); font: inherit; font-size: 0.9rem; cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--night-line);
+}
+.cal-years button:hover { color: var(--night-ink); box-shadow: inset 0 0 0 1px var(--night-2); }
+.cal-years button[aria-checked="true"] { background: var(--night-ink); color: var(--dark); box-shadow: none; }
+.cal-yc { font-size: 0.68rem; color: var(--night-2); }
+.cal-years button[aria-checked="true"] .cal-yc { color: #5b5753; }
+.cal-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.4rem; font-size: 0.72rem; letter-spacing: 0.02em; text-transform: uppercase; color: var(--night-2); }
+.cal-scale { display: inline-flex; align-items: center; gap: 0.5rem; }
+.cal-scale i { display: block; width: 6rem; height: 0.55rem; border-radius: 2px; background: linear-gradient(90deg, var(--cal-lo), var(--cal-hi)); }
+.cal-key { display: inline-flex; align-items: center; gap: 0.5rem; }
+.cal-key i { display: block; width: 0.8rem; height: 0.8rem; border-radius: 2px; background: color-mix(in oklab, var(--cal-lo), var(--cal-hi) 60%); }
+.cal-key-go { box-shadow: inset 0 0 0 2px var(--cal-go); }
+.cal-key-now { outline: 2px solid var(--night-ink); outline-offset: 1px; }
+.cal-sum { margin: 0 0 1.6rem; font-size: 1.15rem; line-height: 1.45; color: var(--night-3); }
+.cal-sum b { color: var(--night-ink); font-weight: 500; }
+.cal-next { padding: 0; border: 0; background: none; font: inherit; color: var(--sun-ink); cursor: pointer; text-decoration: underline; text-underline-offset: 0.25em; }
+.cal-grid-wrap { position: relative; }
+.cal-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 3px; margin: 0 -3px; width: calc(100% + 6px); }
+.cal-grid th { font-weight: 400; color: var(--night-2); }
+.cal-grid thead th { font-size: 0.68rem; text-align: center; padding-bottom: 0.3rem; }
+.cal-grid thead th:first-child, .cal-mon { width: 2.8rem; }
+.cal-mon { font-size: 0.72rem; letter-spacing: 0.02em; text-transform: uppercase; text-align: left; padding-right: 0.4rem; }
+.cal-grid td { padding: 0; height: 1.45rem; }
+.cal-out { background: repeating-linear-gradient(135deg, transparent 0 3px, rgb(241 237 235 / 0.06) 3px 4px); border-radius: 2px; }
+.cal-c {
+  display: block; width: 100%; height: 100%; min-height: 0.6rem; padding: 0; border: 0; border-radius: 2px; cursor: pointer;
+  background: color-mix(in oklab, var(--cal-lo), var(--cal-hi) calc(var(--v) * 100%));
+}
+.cal-c.go { box-shadow: inset 0 0 0 2px var(--cal-go); }
+.cal-c:hover { filter: brightness(1.25); }
+.cal-c:focus-visible { outline: 2px solid var(--night-ink); outline-offset: 1px; position: relative; z-index: 1; }
+.cal-c.now { outline: 2px solid var(--night-ink); outline-offset: 1px; position: relative; z-index: 1; }
+.cal-tip {
+  position: absolute; z-index: 3; display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.75rem; border-radius: 0.6rem;
+  background: rgb(18 18 18 / 0.96); box-shadow: inset 0 0 0 1px var(--night-line); font-size: 0.8rem; white-space: nowrap; pointer-events: none;
+}
+.cal-tip b { font-weight: 500; color: var(--night-ink); }
+.cal-tip .num { color: var(--night-3); }
+.cal-tip-now { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--night-2); }
+.cal-read { margin: 1rem 0 0; font-size: 0.8rem; color: var(--night-2); }
+@media (max-width: 767px) {
+  .calendar { padding-top: 4rem; }
+  .cal-grid { border-spacing: 1px; margin: 0 -1px; width: calc(100% + 2px); }
+  .cal-grid thead th:first-child, .cal-mon { width: 2rem; }
+  .cal-mon { font-size: 0.62rem; padding-right: 0.2rem; }
+  .cal-grid thead th { font-size: 0.58rem; }
+  .cal-grid td { height: 1.15rem; }
+  .cal-c, .cal-out { border-radius: 1px; }
+  .cal-c.go { box-shadow: inset 0 0 0 1.5px var(--cal-go); }
+  .cal-sum { font-size: 1rem; }
+  .cal-tip { font-size: 0.72rem; gap: 0.4rem; padding: 0.4rem 0.6rem; }
+}

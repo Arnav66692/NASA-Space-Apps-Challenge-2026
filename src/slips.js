@@ -68,12 +68,14 @@ export function analyzeStay(eph, site, startMs, extra = {}) {
  * end of the Moon table are left out.
  * @returns {Array<{slipDays:number,startMs:number,sunHours:number,earthHours:number,bothHours:number,eclipseHours:number}>}
  */
-export function slipSeries(eph, site, startMs, maxSlipDays, horizonDeg = 0) {
+export function slipSeries(eph, site, startMs, maxSlipDays, horizonDeg = 0, horizonProfile = null) {
   const cells = [];
+  // ── terrain ── the skyline is passed only when there is one, so the smooth path is unchanged.
+  const extra = horizonProfile ? { horizonDeg, horizonProfile } : { horizonDeg };
   for (let k = 0; k <= maxSlipDays; k += 1) {
     const t0 = startMs + k * DAY_MS;
     if (t0 + WINDOW_HOURS * HOUR_MS > eph.endMs) break;
-    cells.push(slipCell(k, analyzeStay(eph, site, t0, { horizonDeg })));
+    cells.push(slipCell(k, analyzeStay(eph, site, t0, extra)));
   }
   return cells;
 }

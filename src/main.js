@@ -18,12 +18,16 @@ import { icon } from './icons.js';
 import { WINDOW_HOURS } from './window.js';
 import { loadEphemeris } from './ephemeris.js';
 import { initChrome } from './chrome.js';
+import { initSound } from './sound.js'; // ── sound ──
 import { createDatePicker } from './datepicker.js';
 import { eclipseIntervals } from './eclipse.js';
 import {
   analyzeStay, slipSeries, rankSlips, slipCell, findBackups, meetsNeed, firstRun, NEED_HOURS, DEFAULT_NEED_HOURS,
 } from './slips.js';
 import { verdict, siteRows, planCsv } from './plan.js';
+import { profileFor, TERRAIN_NOT_AVAILABLE } from './terrain.js'; // ── terrain ──
+import { createCalendar } from './calendar.js'; // ── calendar ──
+import { mountHeatmap } from './heatmap.js'; // ── heatmap ──
 
 const $ = (s) => document.querySelector(s);
 const MAX_MIN = WINDOW_HOURS * 60;
@@ -42,12 +46,17 @@ const pairCache = new Map();
 const isPreset = (site, startMs, slipDays) =>
   Boolean(DATASETS[site.id]) && startMs === PRESET_START_MS && slipDays === PRESET_SLIP_DAYS;
 
-const pairKey = (site, startMs, slipDays, horizonDeg) =>
-  `${site.id}|${site.lat}|${site.lonE}|${startMs}|${slipDays}|${horizonDeg}`;
+const pairKey = (site, startMs, slipDays, horizonDeg, profile = null) =>
+  `${site.id}|${site.lat}|${site.lonE}|${startMs}|${slipDays}|${horizonDeg}${profile ? '|lola' : ''}`; // ── terrain ──
+
+// ── terrain ── the site's LOLA skyline when terrain is on and the site has one, else null (smooth).
+const terrainProfile = (site, terrain) => (terrain && site.id !== 'custom' ? profileFor(site.id) : null);
 
 /** Original and delayed analyses for a plan, or null while the table is still loading. */
-function pairFor(site, startMs, slipDays, horizonDeg = 0) {
-  const key = pairKey(site, startMs, slipDays, horizonDeg);
+function pairFor(site, startMs, slipDays, horizonDeg = 0, terrain = false) {
+  const profile = terrainProfile(site, terrain); // ── terrain ──
+  const tx = profile ? { horizonProfile: profile } : {};
+  const key = pairKey(site, startMs, slipDays, horizonDeg, profile);
   if (pairCache.has(key)) return pairCache.get(key);
   let pair;
   if (isPreset(site, startMs, slipDays)) {
@@ -57,12 +66,12 @@ function pairFor(site, startMs, slipDays, horizonDeg = 0) {
     pair = {
       key,
       source: 'horizons',
-      original: analyze({ ...ds.original, slipDays, horizonDeg, ...eclipseFor(ds.original.rows) }),
-      delayed: analyze({ ...ds.delayed, slipDays, horizonDeg, ...eclipseFor(ds.delayed.rows) }),
+      original: analyze({ ...ds.original, slipDays, horizonDeg, ...tx, ...eclipseFor(ds.original.rows) }),
+      delayed: analyze({ ...ds.delayed, slipDays, horizonDeg, ...tx, ...eclipseFor(ds.delayed.rows) }),
     };
   } else {
     if (!eph) return null;
-    const build = (scenario, t0) => analyzeStay(eph, site, t0, { site: site.id, scenario, file: null, slipDays, horizonDeg });
+    const build = (scenario, t0) => analyzeStay(eph, site, t0, { site: site.id, scenario, file: null, slipDays, horizonDeg, ...tx });
     pair = {
       key,
       source: 'table',
@@ -86,13 +95,14 @@ const state = {
   startMs: PRESET_START_MS,
   slipDays: PRESET_SLIP_DAYS,
   horizonDeg: 0,
+  terrain: false, // ── terrain ──
   needHours: DEFAULT_NEED_HOURS,
   scenario: 'original',
   elapsedMin: 0,
 };
 const siteIn = (s) => (s.site === 'custom' ? s.custom : SITES[s.site]);
 const currentSite = () => siteIn(state);
-const pair = () => pairFor(currentSite(), state.startMs, state.slipDays, state.horizonDeg);
+const pair = () => pairFor(currentSite(), state.startMs, state.slipDays, state.horizonDeg, state.terrain);
 const active = () => pair()[state.scenario];
 const selectedT = () => active().start + state.elapsedMin * 60_000;
 
@@ -140,7 +150,9 @@ function answerHtml(p, site, slipDays) {
   }
   const earlier = `The original touchdown offers ${fmtHours(o.both.hours)} hours with both above the horizon.`;
   const where = site.id === 'custom' ? 'this custom site' : site.name;
-  const blocked = o.horizonDeg > 0 ? `, with the lowest ${o.horizonDeg}° of sky blocked by terrain,` : ',';
+  let blocked = o.horizonDeg > 0 ? `, with the lowest ${o.horizonDeg}° of sky blocked by terrain,` : ',';
+  // ── terrain ──
+  if (o.horizonProfile) blocked = o.horizonDeg > 0 ? `, with the LOLA terrain skyline plus a ${o.horizonDeg}° margin,` : ', with the LOLA terrain skyline,';
   const eclipse = [['original', o], ['delayed', d]]
     .filter(([, a]) => a.eclipse.any.length)
     .map(([name, a]) =>
@@ -352,6 +364,15 @@ marginPicker.addEventListener('click', (e) => {
   setState({ horizonDeg: Number(b.dataset.margin) });
 });
 radioKeys(marginPicker, '[data-margin]', (b) => setState({ horizonDeg: Number(b.dataset.margin) }));
+// ── terrain ── Smooth or LOLA terrain horizon. Only built-in sites have a skyline.
+const terrainPicker = $('#terrain-picker');
+terrainPicker?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-terrain]');
+  if (!b || b.disabled) return;
+  stopAnim();
+  setState({ terrain: b.dataset.terrain === '1' });
+});
+if (terrainPicker) radioKeys(terrainPicker, '[data-terrain]', (b) => !b.disabled && setState({ terrain: b.dataset.terrain === '1' }));
 
 // ───────────── Every site on the same plan ─────────────
 let lastSiteRows = [];
@@ -361,14 +382,14 @@ function renderSites(o, d) {
   $('#sites-sub').textContent =
     `Touchdown ${fmtUtc(o.start, { year: true })} and the same slip of ${slipShort(state.slipDays)} at every landing site${
       state.horizonDeg > 0 ? `, with a ${state.horizonDeg}° terrain margin` : ''
-    }. Original → delayed, best delayed stay first. The verdict is the delayed stay against a need of ${state.needHours} h with both up without a break. Pick a row to open that site.`;
+    }${state.terrain ? ', with each site\'s LOLA terrain skyline' : ''}. Original → delayed, best delayed stay first. The verdict is the delayed stay against a need of ${state.needHours} h with both up without a break. Pick a row to open that site.`;
   if (!eph) {
     body.innerHTML = '<tr><td colspan="6" class="sites-wait">Loading the Moon table.</td></tr>';
     return;
   }
   const list = [...Object.values(SITES), ...(state.site === 'custom' && state.custom ? [state.custom] : [])];
   const entries = list
-    .map((site) => ({ site, pair: pairFor(site, state.startMs, state.slipDays, state.horizonDeg) }))
+    .map((site) => ({ site, pair: pairFor(site, state.startMs, state.slipDays, state.horizonDeg, state.terrain) }))
     .filter((e) => e.pair);
   lastSiteRows = siteRows(entries, state.needHours);
   body.innerHTML = lastSiteRows
@@ -395,6 +416,17 @@ $('#sites-body').addEventListener('click', (e) => {
   stopAnim();
   setState({ site: row.dataset.siteRow, transition: true });
   document.getElementById('navigator').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+});
+
+// ── calendar ── Every touchdown day at this site. Picking a day makes it the original touchdown.
+const calendar = createCalendar($('#cal-root'), {
+  onPick: (dayMs) => {
+    stopAnim();
+    const problem = planProblem(dayMs, state.slipDays);
+    if (problem) planMessage(problem, true);
+    else setState({ startMs: dayMs, transition: true });
+    document.getElementById('navigator').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  },
 });
 
 // ───────────── Download the plan as CSV ─────────────
@@ -459,7 +491,7 @@ $('#copy-link').addEventListener('click', async () => {
 function stateQuery() {
   const isDefault =
     state.site === 'athena' && state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS &&
-    state.horizonDeg === 0 && state.needHours === DEFAULT_NEED_HOURS && state.scenario === 'original' &&
+    state.horizonDeg === 0 && !state.terrain && state.needHours === DEFAULT_NEED_HOURS && state.scenario === 'original' &&
     Math.round(state.elapsedMin) === 0;
   if (isDefault) return '';
   const q = new URLSearchParams();
@@ -471,6 +503,7 @@ function stateQuery() {
   q.set('start', toInputValue(state.startMs));
   q.set('slip', String(state.slipDays));
   if (state.horizonDeg > 0) q.set('h', String(state.horizonDeg));
+  if (state.terrain) q.set('terrain', '1'); // ── terrain ──
   if (state.needHours !== DEFAULT_NEED_HOURS) q.set('need', String(state.needHours));
   q.set('view', state.scenario);
   q.set('t', String(Math.round(state.elapsedMin)));
@@ -513,6 +546,7 @@ function patchFromUrl() {
   if (Number.isInteger(slip) && slip >= 1 && slip <= MAX_SLIP_DAYS) patch.slipDays = slip;
   const h = Number(q.get('h'));
   if (q.has('h') && HORIZON_MARGINS.includes(h)) patch.horizonDeg = h;
+  if (q.get('terrain') === '1') patch.terrain = true; // ── terrain ──
   const need = Number(q.get('need'));
   if (q.has('need') && NEED_HOURS.includes(need)) patch.needHours = need;
   if (['original', 'delayed'].includes(q.get('view'))) patch.scenario = q.get('view');
@@ -579,10 +613,10 @@ $('#play').addEventListener('click', () => {
 });
 
 // ───────────── Blue Ghost replay (always the reference plan) ─────────────
-const REPLAY = { site: 'blueGhost', scenario: 'original', startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS, horizonDeg: 0 };
+const REPLAY = { site: 'blueGhost', scenario: 'original', startMs: PRESET_START_MS, slipDays: PRESET_SLIP_DAYS, horizonDeg: 0, terrain: false }; // ── terrain ──
 const onReplayPlan = () =>
   state.site === 'blueGhost' && state.scenario === 'original' &&
-  state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS && state.horizonDeg === 0;
+  state.startMs === PRESET_START_MS && state.slipDays === PRESET_SLIP_DAYS && state.horizonDeg === 0 && !state.terrain;
 const bgSunset = () => A.blueGhost.original.bodies.sun.events.find((e) => e.type === 'set');
 const sunsetMin = () => (bgSunset().t - A.blueGhost.original.start) / 60_000;
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -679,10 +713,11 @@ const slipStrip = createSlipStrip($('#slips'), {
 /** Hours for every slip at this site and touchdown. The cells for slip 0 and the chosen slip come from the pair on screen. */
 function renderSlips(p, site) {
   if (!eph) return;
-  const key = `${site.id}|${site.lat}|${site.lonE}|${state.startMs}|${state.horizonDeg}`;
+  const profile = terrainProfile(site, state.terrain); // ── terrain ──
+  const key = `${site.id}|${site.lat}|${site.lonE}|${state.startMs}|${state.horizonDeg}${profile ? '|lola' : ''}`;
   if (!seriesCache.has(key)) {
     if (seriesCache.size >= MAX_CACHED_SERIES) seriesCache.clear();
-    seriesCache.set(key, slipSeries(eph, site, state.startMs, MAX_SLIP_DAYS, state.horizonDeg));
+    seriesCache.set(key, slipSeries(eph, site, state.startMs, MAX_SLIP_DAYS, state.horizonDeg, profile));
   }
   const cells = seriesCache.get(key).map((c) => {
     if (c.slipDays === 0) return slipCell(0, p.original);
@@ -771,6 +806,19 @@ const strip = createSkyStrip($('#strip'));
 let globe = null;
 let surface = null;
 let toMoonFixed = null;
+// ── heatmap ── Where to land on the globe, for the touchdown shown (scenario start) and the margin.
+const heatmap = mountHeatmap({
+  button: document.querySelector('[data-heatmap-toggle]'),
+  legend: document.querySelector('#heat-legend'),
+  inputs: () =>
+    eph && {
+      eph,
+      startMs: state.startMs + (state.scenario === 'delayed' ? state.slipDays * DAY_MS : 0),
+      horizonDeg: state.horizonDeg,
+      needHours: state.needHours,
+    },
+  globe: () => globe,
+});
 
 function readoutHtml(sample, a, t) {
   return ['sun', 'earth']
@@ -780,7 +828,7 @@ function readoutHtml(sample, a, t) {
       const covered = b === 'sun' && up ? eclipseAt(a, t) : null;
       const status = !up
         ? s.el > 0
-          ? '▼ Hidden by terrain margin'
+          ? (a.horizonProfile ? '▼ Hidden by terrain' : '▼ Hidden by terrain margin') // ── terrain ──
           : '▼ Below horizon'
         : covered === 'total'
           ? '▲ Above horizon, behind Earth'
@@ -841,7 +889,7 @@ function setState(patch) {
   const next = { ...state, ...rest };
   next.elapsedMin = Math.min(Math.max(next.elapsedMin, 0), MAX_MIN);
   const site = siteIn(next);
-  if (!site || !pairFor(site, next.startMs, next.slipDays, next.horizonDeg)) {
+  if (!site || !pairFor(site, next.startMs, next.slipDays, next.horizonDeg, next.terrain)) {
     // Only reachable before the Moon table has loaded.
     planMessage('Still loading the Moon table. Try again in a moment.', true);
     return;
@@ -863,6 +911,7 @@ function renderPlan(p, site) {
   timelines.render([o, d]);
   renderSlips(p, site);
   renderSites(o, d);
+  calendar.render({ eph, site, horizonDeg: state.horizonDeg, horizonProfile: terrainProfile(site, state.terrain), needHours: state.needHours, startMs: state.startMs }); // ── calendar ──
   for (const [id, a] of [['original', o], ['delayed', d]]) {
     const v = verdict(a.stretches.longestBoth, state.needHours);
     const chip = $(`#td-${id}-verdict`);
@@ -871,7 +920,9 @@ function renderPlan(p, site) {
     chip.textContent = v === 'go' ? 'Go' : 'No go';
   }
   document.querySelectorAll('.model-tag').forEach((tag) => {
-    tag.textContent = state.horizonDeg > 0 ? `Terrain margin ${state.horizonDeg}°` : 'Smooth-horizon estimate';
+    tag.textContent = o.horizonProfile // ── terrain ──
+      ? `LOLA terrain horizon${state.horizonDeg > 0 ? ` plus ${state.horizonDeg}°` : ''}`
+      : state.horizonDeg > 0 ? `Terrain margin ${state.horizonDeg}°` : 'Smooth-horizon estimate';
   });
 
   $('#slip-words').textContent = slipWords(state.slipDays);
@@ -942,6 +993,19 @@ function render({ transition, quiet } = {}) {
     b.setAttribute('aria-checked', String(on));
     b.tabIndex = on ? 0 : -1;
   });
+  // ── terrain ── custom points have no skyline, so LOLA terrain is disabled there with a note.
+  if (terrainPicker) {
+    const canTerrain = Boolean(profileFor(site.id)) && site.id !== 'custom';
+    terrainPicker.querySelectorAll('[data-terrain]').forEach((b) => {
+      const on = (b.dataset.terrain === '1') === (state.terrain && canTerrain);
+      b.setAttribute('aria-checked', String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (b.dataset.terrain === '1') b.disabled = !canTerrain;
+    });
+    $('#terrain-help').textContent = canTerrain
+      ? 'LOLA terrain uses the real skyline around the site, from NASA elevation data. Any margin is added on top.'
+      : TERRAIN_NOT_AVAILABLE;
+  }
   document.querySelectorAll('#scn-switch [data-scenario]').forEach((b) => {
     const on = b.dataset.scenario === state.scenario;
     b.setAttribute('aria-checked', String(on));
@@ -971,7 +1035,7 @@ function render({ transition, quiet } = {}) {
   const sunHidden = sUp && eclipseAt(a, t) === 'total';
   const darkNote = !sUp
     ? sample.sun.el > 0
-      ? 'Sun hidden by terrain margin'
+      ? (a.horizonProfile ? 'Sun hidden by terrain' : 'Sun hidden by terrain margin') // ── terrain ──
       : 'Modeled darkness'
     : sunHidden
       ? 'Sun behind Earth'
@@ -987,6 +1051,7 @@ function render({ transition, quiet } = {}) {
       transition,
     });
   }
+  heatmap.refresh(); // ── heatmap ──
   // The surface camera re-frames when the site, touchdown, slip or scenario changes,
   // and follows the Sun and Earth during playback until the user drags the view.
   if (surface) {
@@ -1010,6 +1075,7 @@ buildSitePicker();
 buildScenarioSwitch();
 buildScrubTicks();
 const chrome = initChrome();
+initSound(); // ── sound ──
 
 // A shared address that points at a reference plan can open at once. Anything
 // else waits for the Moon table.

@@ -25,7 +25,7 @@
         var d = document.documentElement;
         var h = location.hash.slice(1);
         var q = location.search.replace(/^\?/, '').split('&').filter(function (p) { return p && p.indexOf('look=') !== 0; });
-        var tool = ['navigator', 'sites', 'instrument', 'replay', 'methods', 'checks'].indexOf(h) > -1 || (!h && q.length > 0);
+        var tool = ['navigator', 'sites', 'calendar', 'instrument', 'replay', 'methods', 'checks'].indexOf(h) > -1 || (!h && q.length > 0);
         d.dataset.page = tool ? 'tool' : 'home';
         d.classList.add('js');
         if (!tool && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('intro-on', 'entering');
@@ -58,6 +58,8 @@
         <a class="nav-item" href="#replay" data-roll>Replay</a>
         <a class="nav-item" href="#methods" data-roll>Methods</a>
       </nav>
+      <!-- sound -->
+      <button class="sound-pill" type="button" aria-pressed="false" aria-label="Sound" data-sound><span class="sound-pill__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span aria-hidden="true">Sound</span><span class="sound-pill__state" aria-hidden="true" data-sound-state>Off</span></button>
       <button class="disc disc--menu" type="button" aria-expanded="false" aria-controls="menu" data-menu-toggle>
         <span class="disc__fill" aria-hidden="true"></span>
         <span class="disc__dots" aria-hidden="true"><i></i><i></i></span>
@@ -171,6 +173,15 @@
                   <div class="seg" role="radiogroup" aria-labelledby="margin-k" aria-describedby="margin-help" id="margin-picker"></div>
                   <p class="margin-help" id="margin-help">Treat the lowest few degrees of sky as blocked by ridges and crater rims. Every number below reruns.</p>
                 </div>
+                <!-- ── terrain ── -->
+                <span class="plan-k" id="terrain-k">Horizon</span>
+                <div class="margin-row">
+                  <div class="seg" role="radiogroup" aria-labelledby="terrain-k" aria-describedby="terrain-help" id="terrain-picker">
+                    <button type="button" role="radio" data-terrain="0" aria-checked="true"><span class="sp-name">Smooth</span></button>
+                    <button type="button" role="radio" data-terrain="1" aria-checked="false"><span class="sp-name">LOLA terrain</span></button>
+                  </div>
+                  <p class="margin-help" id="terrain-help">LOLA terrain uses the real skyline around the site, from NASA elevation data. Any margin is added on top.</p>
+                </div>
               </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
@@ -240,6 +251,7 @@
 
         <figure class="globe-wrap" aria-labelledby="globe-cap">
           <div class="globe" id="globe" role="img" aria-label="3D Moon globe"></div>
+          <div class="heat-legend" id="heat-legend" hidden></div><!-- ── heatmap ── -->
           <div class="globe-hud" aria-hidden="true">
             <span class="hud-scn" id="globe-scn"></span>
             <span class="hud-t num" id="globe-t"></span>
@@ -248,6 +260,8 @@
             <span class="lg"><i class="sw sw-term"></i>Sunrise / sunset line</span>
             <span class="lg"><i class="sw sw-limb"></i>Earth on the horizon</span>
             <div class="seg look-switch" role="radiogroup" aria-label="Look of the 3D views" data-look-switch></div>
+            <!-- ── heatmap ── -->
+            <div class="seg heat-switch"><button type="button" role="switch" aria-checked="false" data-heatmap-toggle title="Tint the Moon by the longest stretch with Sun and Earth both up"><span class="sp-name">Heatmap</span></button></div>
             <span class="lg-note">Drag to rotate. Lighting from JPL Sun direction at the selected instant.</span>
           </figcaption>
         </figure>
@@ -276,6 +290,15 @@
             <tbody id="sites-body"><tr><td colspan="6" class="sites-wait">Loading the Moon table.</td></tr></tbody>
           </table>
         </div>
+      </section>
+
+      <!-- ── calendar ── Every touchdown day at the current site -->
+      <section class="calendar" id="calendar" aria-labelledby="cal-h">
+        <header class="sec-head">
+          <h2 id="cal-h">Every date, this site</h2>
+          <p class="sec-sub">The same 72 hour check for a touchdown at 00:00 UTC on every day from 2024 to 2030. Brighter days give a longer unbroken stretch with the Sun and Earth both up, and a green ring marks the days that meet the need. Pick a day to make it the touchdown.</p>
+        </header>
+        <div class="cal-wrap" id="cal-root"></div>
       </section>
 
       <section class="instrument" id="instrument" aria-labelledby="inst-h">
@@ -429,6 +452,11 @@
               The terrain margin raises the line that counts as the horizon to 1, 2 or 5 degrees, as a
               stand-in for ridges and crater rims. It is the same in every direction around the site, so it
               is a what-if, not a measured horizon.
+              <!-- ── terrain ── -->
+              The LOLA terrain horizon replaces the flat line with the skyline seen from 2 m above the ground at each
+              built-in site, traced out to 150 km over NASA's LOLA elevation map (CGI Moon Kit, 16 pixels per degree,
+              Moon curvature included). That map has about 1.9 km pixels north to south, so near the poles small ridges
+              and crater rims are smoothed and the skyline is an estimate. Custom points use the smooth horizon.
               The mission need is a number of hours with the Sun and Earth both above the horizon, without a break.
               A stay meets it when its longest unbroken stretch is at least the need. The go and no go marks,
               the site table and the backup finder all use this same test.

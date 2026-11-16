@@ -3,7 +3,7 @@
 // The behaviour follows unseen.co, measured for Arnav's portfolio build. The code is original.
 // Written with an AI tool (Claude).
 
-const TOOL_ANCHORS = ['navigator', 'sites', 'instrument', 'replay', 'methods', 'checks'];
+const TOOL_ANCHORS = ['navigator', 'sites', 'calendar', 'instrument', 'replay', 'methods', 'checks'];
 const LEAVE_MS = 480;
 const MENU_MS = 1000;
 const INTRO_MIN_MS = 1500;
