@@ -415,17 +415,28 @@ $('#sites-body').addEventListener('click', (e) => {
   if (!row) return;
   stopAnim();
   setState({ site: row.dataset.siteRow, transition: true });
-  document.getElementById('navigator').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  showGlobe();
 });
+
+// Bring the 3D Moon, Sun and Earth view to the middle of the screen. The top of #navigator is only the
+// headline; the globe sits well below it, so scrolling there left people at the top of the page.
+function showGlobe() {
+  $('.globe-wrap').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+}
 
 // ── calendar ── Every touchdown day at this site. Picking a day makes it the original touchdown.
 const calendar = createCalendar($('#cal-root'), {
   onPick: (dayMs) => {
     stopAnim();
     const problem = planProblem(dayMs, state.slipDays);
-    if (problem) planMessage(problem, true);
-    else setState({ startMs: dayMs, transition: true });
-    document.getElementById('navigator').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    if (problem) {
+      // Nothing changed, so show the reason instead of the globe.
+      planMessage(problem, true);
+      $('#plan-msg').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      return;
+    }
+    setState({ startMs: dayMs, transition: true });
+    showGlobe();
   },
 });
 
