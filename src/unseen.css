@@ -414,6 +414,9 @@ legend { margin-bottom: 0.7rem; }
 .m-change span:first-child { font-size: 1.05rem; font-weight: 400; padding: 0; border-radius: 0; background: none !important; }
 .model-tag { font-family: var(--sans); font-size: 0.7rem; letter-spacing: 0.02em; border: 0; border-radius: 0; padding: 0; color: var(--night-3); text-decoration: underline; text-underline-offset: 0.2em; }
 .model-tag::before { display: none; }
+.check-tag { margin-left: 0.8rem; font-family: var(--sans); font-size: 0.7rem; letter-spacing: 0.02em; color: var(--night-3); text-decoration: underline; text-underline-offset: 0.2em; text-transform: uppercase; white-space: nowrap; }
+.check-tag:hover { color: var(--night-ink); }
+#checks { scroll-margin-top: 6rem; }
 code { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; border-radius: 0.3rem; background: var(--bar); border-color: transparent; }
 
 /* The globe column. */

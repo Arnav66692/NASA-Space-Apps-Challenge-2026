@@ -9,13 +9,23 @@
       content="What changes in the first 72 hours on the Moon if touchdown slips nine days? Sun and Earth visibility at real landing sites from NASA JPL Horizons."
     />
     <meta name="theme-color" content="#07090c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Long Shadow" />
+    <meta property="og:title" content="Long Shadow · What a slipped Moon landing costs" />
+    <meta property="og:description" content="Pick any landing site, date and delay. See the hours of Sun and Earth in the first 72 hours, from NASA JPL Horizons data." />
+    <meta property="og:url" content="https://long-shadow-moon.vercel.app/" />
+    <meta property="og:image" content="https://long-shadow-moon.vercel.app/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A crescent Moon over the words Touchdown slips, the sky moves on" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23d9d6cf'/%3E%3Cpath d='M16 3a13 13 0 0 1 0 26z' fill='%2307090c'/%3E%3C/svg%3E" />
     <script>
       (function () {
         var d = document.documentElement;
         var h = location.hash.slice(1);
         var q = location.search.replace(/^\?/, '').split('&').filter(function (p) { return p && p.indexOf('look=') !== 0; });
-        var tool = ['navigator', 'sites', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && q.length > 0);
+        var tool = ['navigator', 'sites', 'instrument', 'replay', 'methods', 'checks'].indexOf(h) > -1 || (!h && q.length > 0);
         d.dataset.page = tool ? 'tool' : 'home';
         d.classList.add('js');
         if (!tool && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('intro-on', 'entering');
@@ -197,7 +207,8 @@
             <table>
               <caption>
                 <span class="cap-in">Hours above the horizon in the first 72&nbsp;h
-                <a class="model-tag" href="#methods">Smooth-horizon estimate</a></span>
+                <a class="model-tag" href="#methods">Smooth-horizon estimate</a>
+                <a class="check-tag" href="#checks">Checked against JPL</a></span>
               </caption>
               <thead>
                 <tr>
@@ -393,6 +404,20 @@
         <p class="m-lede"><strong>Smooth-horizon estimate.</strong> Local terrain and lander hardware are outside this model.</p>
         <div class="m-grid">
           <div>
+            <h3>Why it matters</h3>
+            <p>
+              Most landers run on sunlight and talk to Earth by direct radio, so the hours with the Sun and Earth
+              up are the hours a mission can work. Intuitive Machines' Athena landed near Mons Mouton on
+              March 6, 2025, on its side in a cold crater where its solar panels could not recharge it. Its
+              batteries ran down and the mission ended about 13 hours after landing. NASA's October 2024 list of
+              nine Artemis III candidate regions includes Mons Mouton and Mons Mouton Plateau.
+              Solar landers are usually built for one lunar day of about 14 Earth days. Blue Ghost stopped
+              after sunset on March 16, 2025, and Chandrayaan-3 never woke after its first night in 2023.
+              <a href="https://www.nasa.gov/news-release/nasa-receives-some-data-before-intuitive-machines-ends-lunar-mission/" target="_blank" rel="noopener">NASA: Athena mission ends ↗</a>
+              <a href="https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/" target="_blank" rel="noopener">NASA: Artemis III regions ↗</a>
+            </p>
+          </div>
+          <div>
             <h3>What the numbers mean</h3>
             <p>
               <strong>Sun above horizon</strong> marks a geometric opportunity for solar power.
@@ -420,6 +445,8 @@
               (<code>QUANTITIES=4</code>), UTC. Azimuth runs clockwise from north. Site coordinates from
               <a href="https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html" target="_blank" rel="noopener">NASA NSSDCA ↗</a>.
               The CSVs ship with the site and the collector script (<code>Get-LunarHorizons.ps1</code>) regenerates them.
+              Raw JPL files: <a href="data/athena-original.csv">Athena original</a>, <a href="data/athena-delayed.csv">Athena delayed</a>,
+              <a href="data/blue-ghost-original.csv">Blue Ghost original</a>, <a href="data/blue-ghost-delayed.csv">Blue Ghost delayed</a>.
             </p>
             <p>
               Every other site, date and slip is computed in the browser from one bundled table. It holds the
@@ -439,7 +466,7 @@
               interpolates elevation linearly and azimuth along the shorter arc.
             </p>
           </div>
-          <div>
+          <div id="checks">
             <h3>Checks completed</h3>
             <p>
               Automated tests reproduce every reference total and crossing for all four presets (wholly above,
