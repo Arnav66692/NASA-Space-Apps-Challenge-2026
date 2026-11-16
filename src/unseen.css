@@ -80,6 +80,12 @@ sup { font-size: inherit; line-height: 0; }
 /* On the navigator the header steps away while reading down, and returns on the way up. */
 .header { transition: transform 0.6s var(--expo); }
 html.header-away:not(.menu-open) .header { transform: translateY(-110%); }
+/* On the navigator a soft fade behind the header keeps the logo off the headings it scrolls over. */
+html[data-page="tool"] .header::before {
+  content: ''; position: absolute; inset: 0 0 -2rem; z-index: -1; pointer-events: none;
+  background: linear-gradient(var(--night) 45%, rgb(10 10 10 / 0));
+}
+.lbl-cardinal.is-covered { opacity: 0; transition: opacity 0.3s; }
 .logo {
   display: block;
   font-size: 1.65rem; line-height: 1; letter-spacing: -0.03em;

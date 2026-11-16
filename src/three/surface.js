@@ -258,8 +258,10 @@ export function createSurface(container) {
   const cardinal = [
     [0, 'N'], [45, 'NE'], [90, 'E'], [135, 'SE'], [180, 'S'], [225, 'SW'], [270, 'W'], [315, 'NW'],
   ];
+  const cardinalLbls = [];
   for (const [az, name] of cardinal) {
     const d = document.createElement('div');
+    cardinalLbls.push({ az, d });
     d.className = `lbl lbl-cardinal ${name.length === 1 ? 'major' : ''}`;
     d.textContent = name;
     const o = new CSS2DObject(d);
@@ -750,6 +752,17 @@ export function createSurface(container) {
     }
   }
 
+  /** A compass letter steps aside when a low Sun or Earth label sits on the same bearing. */
+  const CARDINAL_CLEAR_DEG = 12;
+  const LOW_BODY_DEG = 25;
+  function hideCoveredCardinals(sample) {
+    const low = ['sun', 'earth'].filter((k) => sample[k].el > -1 && sample[k].el < LOW_BODY_DEG).map((k) => sample[k].az);
+    for (const { az, d } of cardinalLbls) {
+      const covered = low.some((b) => Math.abs(((b - az + 540) % 360) - 180) < CARDINAL_CLEAR_DEG);
+      d.classList.toggle('is-covered', covered);
+    }
+  }
+
   /**
    * @param {{viewKey: string, sample: object}} p viewKey changes with the site,
    *   touchdown, slip or scenario; each change re-frames the camera.
@@ -774,6 +787,7 @@ export function createSurface(container) {
       closeLower = sample.sun.el < sample.earth.el ? sunLbl : earthLbl;
     }
     labelSides();
+    hideCoveredCardinals(sample);
 
     // Sun: fade across its own disk (±0.27°) as it crosses the horizon.
     const sunUp = THREE.MathUtils.smoothstep(sample.sun.el, -SUN_RADIUS_DEG, SUN_RADIUS_DEG);
