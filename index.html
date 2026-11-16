@@ -109,7 +109,7 @@
       <section class="hero" id="navigator" aria-labelledby="q">
         <div class="hero-copy">
           <p class="eyebrow">NASA Space Apps 2026 · Lunar Landing Site Navigator</p>
-          <h1 id="q">What changes in the first 72&nbsp;hours on the Moon if touchdown slips <em id="slip-words">nine days</em>?</h1>
+          <h1 id="q">What changes in the first <span id="stay-words">72&nbsp;hours</span> on the Moon if touchdown slips <em id="slip-words">nine days</em>?</h1>
 
           <p class="answer" id="answer" aria-live="polite"></p>
 
@@ -182,6 +182,12 @@
                   </div>
                   <p class="margin-help" id="terrain-help">LOLA terrain uses the real skyline around the site, from NASA elevation data. Any margin is added on top.</p>
                 </div>
+                <!-- ── stay length ── -->
+                <span class="plan-k" id="stay-k">Stay length</span>
+                <div class="margin-row">
+                  <div class="seg" role="radiogroup" aria-labelledby="stay-k" aria-describedby="stay-help" id="stay-picker"></div>
+                  <p class="margin-help" id="stay-help">The comparison, the timelines and the mission clock cover this length. A lunar day is 709 hours. The slip strip, the backup finder, the calendar and the site table use the first 72 hours.</p>
+                </div>
               </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
@@ -193,7 +199,7 @@
 
             <div class="slips" id="slips" role="group" aria-labelledby="slips-k">
               <div class="slips-head">
-                <span class="slips-k" id="slips-k">Every slip, 0 to 30 days</span>
+                <span class="slips-k" id="slips-k">Every slip, 0 to 30 days, first 72 hours</span>
                 <span class="slips-legend" aria-hidden="true">
                   <span><i class="sl-sun"></i>Sun</span><span><i class="sl-earth"></i>Earth</span><span><i class="sl-both"></i>Both</span>
                   <span><i class="sl-ok"></i>Meets your need</span>
@@ -217,7 +223,7 @@
           <div class="metrics" id="metrics">
             <table>
               <caption>
-                <span class="cap-in">Hours above the horizon in the first 72&nbsp;h
+                <span class="cap-in">Hours above the horizon in the first <span id="stay-words-metrics">72&nbsp;hours</span>
                 <a class="model-tag" href="#methods">Smooth-horizon estimate</a>
                 <a class="check-tag" href="#checks">Checked against JPL</a></span>
               </caption>
@@ -246,6 +252,8 @@
               </thead>
               <tbody id="stretch-body"></tbody>
             </table>
+            <div class="dsn-panel" id="dsn-panel" hidden></div><!-- dsn -->
+            <div class="relay-panel" id="relay-panel" hidden></div><!-- relay -->
           </div>
         </div>
 
@@ -303,7 +311,7 @@
 
       <section class="instrument" id="instrument" aria-labelledby="inst-h">
         <header class="sec-head">
-          <h2 id="inst-h">The first 72 hours, side by side</h2>
+          <h2 id="inst-h">The first <span id="stay-words-inst">72 hours</span>, side by side</h2>
           <p class="sec-sub">
             Bars show when each body is above the modeled horizon. Click a timeline or use the mission clock to
             move through the stay. <a class="model-tag" href="#methods">Smooth-horizon estimate</a>
@@ -362,7 +370,7 @@
           <output class="clock-read num" id="clock-read" for="scrubber"></output>
           <p id="scrub-help" class="sr">
             Arrow keys move one hour. Shift plus arrow moves ten minutes. Page Up and Page Down move six hours. Home and
-            End jump to touchdown and to hour 72.
+            End jump to touchdown and to hour <span id="scrub-end-help">72</span>.
           </p>
         </div>
       </section>
@@ -462,6 +470,23 @@
               the site table and the backup finder all use this same test.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
             </p>
+            <!-- relay -->
+            <p>
+              <strong>Far-side relay.</strong> Earth does not rise on the far side, so a lander there talks to Earth
+              through a relay satellite. The relay panel uses an illustrative orbit, because the exact orbits are not public.
+              Chang'e 4 uses Queqiao, in a halo orbit around the Earth-Moon L2 point about 65,000 km from the Moon.
+              The model puts Queqiao on a 13,000 km circle around the point opposite Earth, with a 14 day period.
+              The size, the period and the phase are assumptions.
+              Chang'e 6 and custom far-side points use Queqiao-2, in a 24 hour frozen orbit of 200 km by 16,000 km,
+              inclined 55 degrees, with the closest point over the north. The orbit plane is fixed to the stars, and its
+              node and phase are assumptions. Other sources give a different measured orbit.
+              The relay counts as in view when it is above the smooth horizon, checked every 10 minutes.
+              The model assumes that the relay always sees Earth.
+              <a href="https://www.planetary.org/articles/20180615-queqiao-orbit-explainer" target="_blank" rel="noopener">Planetary Society: Queqiao orbit ↗</a>
+              <a href="https://www.universetoday.com/166339/chinas-relay-satellite-is-in-lunar-orbit/" target="_blank" rel="noopener">Universe Today: Queqiao-2 orbit ↗</a>
+              <a href="https://spacenews.com/?p=356862" target="_blank" rel="noopener">SpaceNews: Queqiao-2 inclination ↗</a>
+              <a href="https://en.wikipedia.org/wiki/Queqiao_2" target="_blank" rel="noopener">Wikipedia: Queqiao-2 ↗</a>
+            </p>
           </div>
           <div>
             <h3>Data</h3>
@@ -493,6 +518,16 @@
               change is <em>delayed − original</em>, rounded only for display. Between samples the sky view
               interpolates elevation linearly and azimuth along the shorter arc.
             </p>
+            <!-- dsn -->
+            <p>
+              Deep Space Network link. Earth above the site horizon is not enough. A DSN antenna on Earth must also
+              see the Moon. The app computes the Moon's apparent elevation from the 70 m antennas at Goldstone (DSS-14),
+              Madrid (DSS-63) and Canberra (DSS-43) every 5 minutes. It uses the lunar series in Meeus, Astronomical
+              Algorithms, chapter 47, with nutation and sidereal time. A complex counts when the Moon is 10° or more
+              above its horizon. Link hours are the hours with Earth up at the site and at least one complex on the Moon.
+              The elevations agree with JPL Horizons within 0.004° at 30 test times in March 2025.
+            </p>
+            <!-- /dsn -->
           </div>
           <div id="checks">
             <h3>Checks completed</h3>

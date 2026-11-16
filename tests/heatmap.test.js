@@ -16,6 +16,9 @@ import {
   computeHeatGrid,
   heatBytes,
   fillFromCoarse,
+  decodeTerrainGrid,
+  gridProfile,
+  heatKey,
   HEAT_MAX_HOURS,
 } from '../src/heatmap.js';
 
@@ -135,5 +138,67 @@ describe('heatmap texture bytes', () => {
     expect(out[3]).toBe(7);
     expect(out[5]).toBe(5);
     expect(out[0]).toBe(5);
+  });
+});
+
+// ── terrain heatmap ── LOLA skylines for every node (data/terrain-grid.bin).
+describe('heatmap with the LOLA terrain horizon', () => {
+  const bin = readFileSync(join(ROOT, 'data', 'terrain-grid.bin'));
+  const tg = decodeTerrainGrid(bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength));
+  const s = heatShape();
+
+  it('decodes one skyline per heatmap node and stays small', () => {
+    expect(bin.byteLength).toBeLessThan(1.5e6);
+    expect([tg.rows, tg.cols]).toEqual([s.rows, s.cols]);
+    expect(360 % tg.nAz).toBe(0);
+    expect(tg.bytes.length).toBe(s.rows * s.cols * tg.nAz);
+    expect(tg.deg[0]).toBeCloseTo(-6, 5);
+    expect(tg.deg[1] - tg.deg[0]).toBeCloseTo(0.1, 5);
+    expect(() => decodeTerrainGrid(new ArrayBuffer(20))).toThrow();
+    expect(() => decodeTerrainGrid(bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength - 1))).toThrow();
+  });
+
+  it('upsamples a node skyline to 360 values that pass through the stored azimuths', () => {
+    const i = nearestNode(s, SITES.athena.lat, SITES.athena.lonE).index;
+    const p = gridProfile(tg, i);
+    const per = 360 / tg.nAz;
+    expect(p).toHaveLength(360);
+    for (let k = 0; k < tg.nAz; k++) expect(p[k * per]).toBeCloseTo(tg.deg[tg.bytes[i * tg.nAz + k]], 5);
+    expect(p.every(Number.isFinite)).toBe(true);
+  });
+
+  it('looks like the per-site skyline at the same place', () => {
+    // A flat mare site: the node skyline and the site skyline both stay low.
+    const flat = gridProfile(tg, nearestNode(s, SITES.blueGhost.lat, SITES.blueGhost.lonE).index);
+    expect(Math.max(...flat)).toBeLessThan(2);
+    // The polar node near Athena has hills in view, as the site skyline does.
+    const polar = gridProfile(tg, nearestNode(s, SITES.athena.lat, SITES.athena.lonE).index);
+    expect(Math.max(...polar)).toBeGreaterThan(2);
+  });
+
+  it('equal analyzeStay with that node skyline at sampled nodes', () => {
+    const nodes = [[3, 15], [8, 100], [20, 40], [45, 90], [54, 31], [86, 170]];
+    const only = nodes.map(([r, c]) => r * s.cols + c);
+    const g = computeHeatGrid(eph, PRESET_START_MS, 0, 2, tg, only);
+    for (const i of only) {
+      const row = Math.floor(i / s.cols);
+      const want = analyzeStay(eph, { id: 'x', lat: nodeLat(s, row), lonE: nodeLonE(s, i % s.cols) }, PRESET_START_MS, {
+        horizonDeg: 0,
+        horizonProfile: gridProfile(tg, i),
+      }).stretches.longestBoth;
+      expect(g.values[i]).toBeCloseTo(want, 4);
+    }
+    // At least one polar node loses hours to the terrain.
+    const smooth = computeHeatGrid(eph, PRESET_START_MS, 0, 2, null, only);
+    expect(only.some((i) => g.values[i] < smooth.values[i] - 0.5)).toBe(true);
+  });
+
+  it('leave terrain-off values and keys unchanged', () => {
+    const only = [45 * s.cols + 90, 5 * s.cols + 15];
+    const g = computeHeatGrid(eph, PRESET_START_MS, 0, 2, null, only);
+    for (const i of only) expect(g.values[i]).toBe(grid.values[i]);
+    expect(heatKey({ startMs: 1, horizonDeg: 0 })).toBe('1|0|2');
+    expect(heatKey({ startMs: 1, horizonDeg: 0, terrain: false })).toBe('1|0|2');
+    expect(heatKey({ startMs: 1, horizonDeg: 0, terrain: true })).toBe('1|0|2|lola');
   });
 });

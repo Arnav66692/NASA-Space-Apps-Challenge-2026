@@ -1,0 +1,23 @@
+/* Far-side relay panel, under the stretches table. Matches the metrics tables. */
+.relay-panel { margin-top: 2rem; min-width: 0; }
+.relay-panel[hidden] { display: none; }
+.relay-cap {
+  display: grid; gap: 0.3rem; margin: 0; padding: 0 0 1rem;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.02em; color: var(--night-2);
+}
+.relay-note { text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--night-3); }
+.relay-block { border-top: 1px solid var(--night-line); padding: 0.9rem 0 1rem; display: grid; gap: 0.4rem; }
+.relay-scn { margin: 0 0 0.2rem; font-size: 0.95rem; letter-spacing: -0.01em; color: var(--night-ink); }
+.relay-row {
+  display: grid; grid-template-columns: 5.2rem minmax(0, 1fr) 3rem; align-items: center; gap: 0.75rem;
+  font-size: 0.78rem; color: var(--night-ink);
+}
+.relay-name { white-space: nowrap; }
+.relay-h { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.relay-track { position: relative; height: 9px; background: var(--night-line); border-radius: 3px; overflow: hidden; }
+.relay-track span { position: absolute; top: 0; bottom: 0; background: var(--earth, #5aa7ff); }
+.relay-read { margin: 0.35rem 0 0; font-size: 0.85rem; color: var(--night-2); }
+.relay-none { margin: 0; padding: 0.9rem 0 0; border-top: 1px solid var(--night-line); font-size: 0.85rem; color: var(--night-2); }
+@media (max-width: 600px) {
+  .relay-row { grid-template-columns: 4.6rem minmax(0, 1fr) 2.8rem; gap: 0.5rem; font-size: 0.74rem; }
+}

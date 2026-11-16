@@ -5,6 +5,7 @@
 // Written with an AI tool (Claude).
 import { analyzeStay } from './slips.js';
 import { WINDOW_HOURS } from './window.js';
+import terrainGridUrl from '../data/terrain-grid.bin?url';
 import './heatmap.css';
 
 export const HEAT_STEP_DEG = 2;
@@ -31,10 +32,55 @@ export function nearestNode(shape, lat, lonE) {
   return { row, col, index: row * shape.cols + col };
 }
 
+// ── terrain heatmap ── LOLA skylines for every grid node, built by tools/build_terrain_grid.py.
+const GRID_HEADER_BYTES = 20;
+
+/**
+ * Read data/terrain-grid.bin. Returns {rows, cols, nAz, bytes, deg} where deg maps a stored byte to
+ * degrees. Throws when the file is not a skyline grid or does not match the heatmap grid.
+ */
+export function decodeTerrainGrid(buffer, shape = heatShape()) {
+  const view = new DataView(buffer);
+  const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
+  if (magic !== 'LSHG' || view.getUint16(4, true) !== 1) throw new Error('This is not a terrain grid file.');
+  const rows = view.getUint16(6, true);
+  const cols = view.getUint16(8, true);
+  const nAz = view.getUint16(10, true);
+  const offset = view.getInt16(12, true) / 100;
+  const fine = view.getUint16(14, true) / 1000;
+  const knee = view.getUint16(16, true);
+  const coarse = view.getUint16(18, true) / 1000;
+  if (rows !== shape.rows || cols !== shape.cols) throw new Error('The terrain grid does not match the heatmap grid.');
+  if (!(nAz > 0) || 360 % nAz !== 0) throw new Error('The terrain grid azimuth count must divide 360.');
+  if (buffer.byteLength !== GRID_HEADER_BYTES + rows * cols * nAz) throw new Error('The terrain grid file has the wrong size.');
+  const deg = new Float32Array(256);
+  for (let b = 0; b < 256; b++) deg[b] = b < knee ? offset + b * fine : offset + knee * fine + (b - knee) * coarse;
+  return { rows, cols, nAz, bytes: new Uint8Array(buffer, GRID_HEADER_BYTES), deg };
+}
+
+/** A node's skyline as 360 values, one per degree of azimuth, by linear interpolation between stored azimuths. */
+export function gridProfile(grid, index) {
+  const { nAz, bytes, deg } = grid;
+  const base = index * nAz;
+  const per = 360 / nAz;
+  const out = new Array(360);
+  for (let a = 0; a < 360; a++) {
+    const x = a / per;
+    const i = Math.floor(x);
+    const f = x - i;
+    const h0 = deg[bytes[base + i]];
+    const h1 = deg[bytes[base + ((i + 1) % nAz)]];
+    out[a] = h0 + (h1 - h0) * f;
+  }
+  return out;
+}
+
 /** Longest unbroken hours with both up for a stay at one point. NaN when the stay is off the Moon table. */
-export function heatValue(eph, lat, lonE, startMs, horizonDeg = 0) {
+export function heatValue(eph, lat, lonE, startMs, horizonDeg = 0, horizonProfile = null) {
   try {
-    return analyzeStay(eph, { id: 'heat', name: '', lat, lonE }, startMs, { horizonDeg }).stretches.longestBoth;
+    // ── terrain heatmap ── the skyline is passed only when there is one, so the smooth path is unchanged.
+    const extra = horizonProfile ? { horizonDeg, horizonProfile } : { horizonDeg };
+    return analyzeStay(eph, { id: 'heat', name: '', lat, lonE }, startMs, extra).stretches.longestBoth;
   } catch {
     return NaN;
   }
@@ -78,13 +124,15 @@ export function fillFromCoarse(shape, values, known) {
 }
 
 /** The whole grid at once. Used by the tests. */
-export function computeHeatGrid(eph, startMs, horizonDeg = 0, stepDeg = HEAT_STEP_DEG) {
+export function computeHeatGrid(eph, startMs, horizonDeg = 0, stepDeg = HEAT_STEP_DEG, terrainGrid = null, only = null) {
   const shape = heatShape(stepDeg);
   const values = new Float32Array(shape.rows * shape.cols).fill(NaN);
-  for (const i of heatOrder(shape)) {
+  for (const i of only ?? heatOrder(shape)) {
     const row = Math.floor(i / shape.cols);
-    values[i] = heatValue(eph, nodeLat(shape, row), nodeLonE(shape, i % shape.cols), startMs, horizonDeg);
+    const profile = terrainGrid ? gridProfile(terrainGrid, i) : null;
+    values[i] = heatValue(eph, nodeLat(shape, row), nodeLonE(shape, i % shape.cols), startMs, horizonDeg, profile);
   }
+  if (only) return { shape, values };
   fillPoles(shape, values);
   return { shape, values };
 }
@@ -101,7 +149,8 @@ export function heatBytes(shape, values) {
   return out;
 }
 
-export const heatKey = ({ startMs, horizonDeg }, stepDeg = HEAT_STEP_DEG) => `${startMs}|${horizonDeg}|${stepDeg}`;
+export const heatKey = ({ startMs, horizonDeg, terrain }, stepDeg = HEAT_STEP_DEG) =>
+  `${startMs}|${horizonDeg}|${stepDeg}${terrain ? '|lola' : ''}`; // ── terrain heatmap ──
 
 // ───────────── Browser side: the toggle, the slices, the legend ─────────────
 
@@ -109,7 +158,7 @@ const SLICE_MS = 7; // compute per slice, so a 60 fps frame still has room to dr
 const CACHE_SIZE = 6;
 
 /** Run the grid in slices. Calls onProgress(values, done, total) after each slice. Returns cancel(). */
-function runSliced({ eph, startMs, horizonDeg, shape }, onProgress, onDone) {
+function runSliced({ eph, startMs, horizonDeg, shape, terrainGrid }, onProgress, onDone) {
   const order = heatOrder(shape);
   const values = new Float32Array(shape.rows * shape.cols).fill(NaN);
   const known = new Uint8Array(values.length);
@@ -127,7 +176,8 @@ function runSliced({ eph, startMs, horizonDeg, shape }, onProgress, onDone) {
     while (k < order.length && performance.now() < end) {
       const i = order[k++];
       const row = Math.floor(i / shape.cols);
-      values[i] = heatValue(eph, nodeLat(shape, row), nodeLonE(shape, i % shape.cols), startMs, horizonDeg);
+      const profile = terrainGrid ? gridProfile(terrainGrid, i) : null;
+      values[i] = heatValue(eph, nodeLat(shape, row), nodeLonE(shape, i % shape.cols), startMs, horizonDeg, profile);
       known[i] = 1;
       if (row === 0 || row === shape.rows - 1) {
         values.fill(values[i], row * shape.cols, (row + 1) * shape.cols);
@@ -152,7 +202,7 @@ const fmtH = (v) => `${Math.round(v)} h`;
 
 function legendHtml(needHours, status) {
   const needPct = (Math.min(needHours, HEAT_MAX_HOURS) / HEAT_MAX_HOURS) * 100;
-  return `<div class="hl-title">Longest stretch with Sun and Earth both up</div>
+  return `<div class="hl-title">Longest stretch with Sun and Earth both up in the first ${HEAT_MAX_HOURS} hours</div>
     <div class="hl-bar"><span class="hl-need" style="left:${needPct}%"></span></div>
     <div class="hl-ticks"><span>0 h</span><span class="hl-need-lbl" style="left:${Math.min(Math.max(needPct, 30), 70)}%">need ${fmtH(needHours)}</span><span>${fmtH(HEAT_MAX_HOURS)}</span></div>
     <div class="hl-status" aria-live="polite">${status}</div>`;
@@ -175,6 +225,26 @@ export function mountHeatmap({ button, legend, inputs, globe }) {
   const shape = heatShape();
   let current = null; // the values on screen, for the hover readout
   let hoverBound = null;
+  // ── terrain heatmap ── the skyline grid loads the first time the map needs it.
+  let terrainGrid = null;
+  let terrainState = 'idle'; // idle, loading, ready or failed
+  function loadTerrain() {
+    terrainState = 'loading';
+    fetch(terrainGridUrl)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((buf) => {
+        terrainGrid = decodeTerrainGrid(buf, shape);
+        terrainState = 'ready';
+      })
+      .catch((err) => {
+        console.warn('Terrain grid did not load, the heatmap uses a smooth horizon.', err);
+        terrainState = 'failed';
+      })
+      .finally(() => refresh());
+  }
   const tip = document.createElement('div');
   tip.className = 'heat-tip';
   tip.hidden = true;
@@ -224,7 +294,14 @@ export function mountHeatmap({ button, legend, inputs, globe }) {
       show(p ? 'Waiting for the 3D globe.' : 'Waiting for the Moon table.', p?.needHours ?? 24);
       return;
     }
-    const key = heatKey(p);
+    // ── terrain heatmap ──
+    if (p.terrain && terrainState === 'idle') loadTerrain();
+    if (p.terrain && terrainState === 'loading') {
+      show('Loading the LOLA terrain grid.', p.needHours);
+      return;
+    }
+    const terrain = Boolean(p.terrain && terrainGrid);
+    const key = heatKey({ ...p, terrain });
     if (key === shownKey) {
       if (runningKey) {
         // Back to the map already on screen while another one was computing.
@@ -253,7 +330,7 @@ export function mountHeatmap({ button, legend, inputs, globe }) {
     runningKey = key;
     show('Computing…', p.needHours);
     cancel = runSliced(
-      { eph: p.eph, startMs: p.startMs, horizonDeg: p.horizonDeg, shape },
+      { eph: p.eph, startMs: p.startMs, horizonDeg: p.horizonDeg, shape, terrainGrid: terrain ? terrainGrid : null },
       (values, done, total) => {
         push(values, inputs()?.needHours ?? p.needHours);
         show(`Computing… ${Math.round((done / total) * 100)}%`, inputs()?.needHours ?? p.needHours);
@@ -274,10 +351,16 @@ export function mountHeatmap({ button, legend, inputs, globe }) {
     );
   }
 
+  // ── terrain heatmap ── say which horizon the map on screen uses.
+  const horizonText = () => {
+    if (shownKey?.endsWith('|lola')) return 'The map uses the LOLA terrain horizon.';
+    if (inputs()?.terrain && terrainState === 'failed') return 'The terrain grid did not load, so the map uses a smooth horizon.';
+    return 'The map uses a smooth horizon.';
+  };
   const doneText = () =>
     shownKey && !cache.get(shownKey)?.some(Number.isFinite)
       ? 'This touchdown is outside the Moon table, so there is nothing to map.'
-      : `Every ${shape.stepDeg}° of the Moon for this touchdown${lastMs ? `, worked out in ${(lastMs / 1000).toFixed(1)} s` : ''}. Outline marks the need.`;
+      : `Every ${shape.stepDeg}° of the Moon for this touchdown${lastMs ? `, worked out in ${(lastMs / 1000).toFixed(1)} s` : ''}. ${horizonText()} Outline marks the need.`;
 
   function setOn(next) {
     on = next;
