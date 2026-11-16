@@ -2,7 +2,7 @@
 // Uses the same row builder and calculation contract as the main comparison, so
 // a cell and the table next to it cannot disagree.
 // Written with an AI tool (Claude).
-import { analyze, HOUR_MS } from './calc.js';
+import { analyze, firstAtLeast, HOUR_MS } from './calc.js';
 import { buildRows, WINDOW_HOURS } from './window.js';
 import { eclipseIntervals } from './eclipse.js';
 
@@ -17,8 +17,41 @@ export function slipCell(slipDays, analysis) {
     earthHours: analysis.bodies.earth.hours,
     bothHours: analysis.both.hours,
     eclipseHours: analysis.eclipse.totalHours,
+    // Continuous stretches, so the backup finder can ask for an unbroken window.
+    bothRuns: analysis.both.intervals,
+    longestBothHours: analysis.stretches.longestBoth,
   };
 }
+
+/** Choices for the backup finder: hours of Sun and Earth up together without a break. */
+export const NEED_HOURS = [6, 12, 24, 48, 72];
+export const DEFAULT_NEED_HOURS = 24;
+
+/**
+ * Backup touchdowns for a missed date: the slips (1 day or more) that give at least `needHours` of
+ * Sun and Earth up together without a break, the earliest of them, the first one later than the slip
+ * in the plan (`afterSlip`), and the slip with the longest unbroken stretch. Ties go to the shorter slip.
+ * @returns {{needHours:number, qualifying:number[], earliest:object|null, next:object|null, longest:object|null}}
+ *   earliest, next and longest are cells.
+ */
+export function findBackups(cells, needHours, afterSlip = 0) {
+  const slipped = cells.filter((c) => c.slipDays >= 1);
+  const qualifying = slipped.filter((c) => meetsNeed(c, needHours));
+  const longest = slipped.reduce((a, c) => (!a || c.longestBothHours > a.longestBothHours + 1e-9 ? c : a), null);
+  return {
+    needHours,
+    qualifying: qualifying.map((c) => c.slipDays),
+    earliest: qualifying[0] ?? null,
+    next: qualifying.find((c) => c.slipDays > afterSlip) ?? null,
+    longest: longest && longest.longestBothHours > 0 ? longest : null,
+  };
+}
+
+/** The first unbroken stretch in a cell that meets the need, as [startMs, endMs], or null. */
+export const firstRun = (cell, needHours) => firstAtLeast(cell.bothRuns, needHours);
+
+/** Does this cell meet the need on its own (any slip, the original included)? */
+export const meetsNeed = (cell, needHours) => Boolean(firstAtLeast(cell.bothRuns, needHours));
 
 /** One full analysis of a stay that starts at startMs, with eclipses counted. */
 export function analyzeStay(eph, site, startMs, extra = {}) {

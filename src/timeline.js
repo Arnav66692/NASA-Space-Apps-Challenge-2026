@@ -1,13 +1,15 @@
 // Availability timelines: two scenarios × (Sun, Earth, Both) bars on a shared
 // 0–72 h axis with a shared elapsed-time cursor. Plain HTML so it reflows
 // cleanly down to phone widths and stays readable without colour.
-import { HOUR_MS } from './calc.js';
+import { HOUR_MS, nextCrossing } from './calc.js';
 import { fmtHours, fmtUtc, fmtUtcTime, fmtElapsed, fmtDuration, fmtDay, slipShort, EVENT_NAME } from './format.js';
 import { scenarioLabel } from './data.js';
 import { icon } from './icons.js';
 
 const WINDOW_H = 72;
 const pct = (t, start) => ((t - start) / HOUR_MS / WINDOW_H) * 100;
+// A stretch gets its length written on the bar when it is at least this share of the 72 h axis.
+const LABEL_MIN_PCT = 15;
 
 const ROWS = [
   { key: 'sun', label: 'Sun', cls: 'sun' },
@@ -60,13 +62,16 @@ export function createTimelines(root, { onSelect }) {
     const iv = rowIntervals(a, key);
     const hours = rowHours(a, key);
     let html = '';
+    const whole = hours === 0 || Math.abs(hours - 72) < 1e-9;
     for (const [s, e] of iv) {
       const l = pct(s, a.start);
       const w = pct(e, a.start) - l;
-      html += `<span class="seg-bar ${key}" style="left:${l}%;width:${w}%"></span>`;
+      // Write each long stretch's length on the bar itself, so it reads without the totals column.
+      const len = !whole && w >= LABEL_MIN_PCT ? `<span class="seg-len num">${fmtHours((e - s) / HOUR_MS)} h</span>` : '';
+      html += `<span class="seg-bar ${key}" style="left:${l}%;width:${w}%">${len}</span>`;
     }
     if (hours === 0) html += `<span class="tl-whole below">Below for all 72 h</span>`;
-    else if (Math.abs(hours - 72) < 1e-9) html += `<span class="tl-whole above">Above for all 72 h</span>`;
+    else if (Math.abs(hours - 72) < 1e-9) html += `<span class="tl-whole above">${key === 'both' ? 'Both up for all 72 h' : 'Above for all 72 h'}</span>`;
 
     if (key !== 'both') {
       for (const ev of a.bodies[key].events) {
@@ -102,6 +107,7 @@ export function createTimelines(root, { onSelect }) {
         <span class="tl-head-ev num">${evText}</span>
         <span class="tl-active" aria-hidden="true"></span>
       </button>
+      <p class="tl-next" data-next="${a.scenario}"></p>
       <div class="tl-rows">${rows}</div>
     </div>`;
   }
@@ -114,7 +120,11 @@ export function createTimelines(root, { onSelect }) {
         major ? `<span>${h}${h === 72 ? ' h' : ''}</span>` : ''
       }</span>`;
     }
-    return `<div class="tl-axis" aria-hidden="true"><span></span><span class="tl-axis-track">${ticks}<span class="tl-cursor"><span class="tl-cursor-tag num"></span></span></span><span></span></div>`;
+    // Day names centred in each 24 hours, so the axis reads as days on the Moon as well as hours.
+    const days = [1, 2, 3]
+      .map((n) => `<span class="tl-day" style="left:${((n - 0.5) / 3) * 100}%">Day ${n}</span>`)
+      .join('');
+    return `<div class="tl-axis" aria-hidden="true"><span></span><span class="tl-axis-track">${days}${ticks}<span class="tl-cursor"><span class="tl-cursor-tag num"></span></span></span><span></span></div>`;
   }
 
   function srTable(analyses) {
@@ -180,6 +190,18 @@ export function createTimelines(root, { onSelect }) {
     cursor.classList.toggle('flip', x > 85);
     const a = current.find((c) => c.scenario === scenario);
     cursor.querySelector('.tl-cursor-tag').textContent = `${fmtElapsed(elapsedMs)} · ${fmtUtcTime(a.start + elapsedMs)} UTC`;
+    // The next crossing from the cursor, in words on the active stay. No hover needed, on any screen.
+    root.querySelectorAll('[data-next]').forEach((el) => {
+      if (el.dataset.next !== scenario) {
+        el.textContent = '';
+        return;
+      }
+      const t = a.start + elapsedMs;
+      const n = nextCrossing(a, t);
+      el.innerHTML = n
+        ? `<span class="tl-next-k">Next from the cursor</span> <b>${EVENT_NAME[n.body][n.type]}</b> in <span class="num">${fmtDuration(n.t - t)}</span> <span class="tl-next-utc num">· ${fmtUtc(n.t)}</span>`
+        : `<span class="tl-next-k">Next from the cursor</span> No further crossing in this window`;
+    });
   }
 
   return { render, update };

@@ -83,6 +83,31 @@ export function subtractIntervals(a, b) {
   return out;
 }
 
+/** The parts of [start, end] that the intervals leave uncovered. */
+export const gapsIn = (intervals, start, end) => subtractIntervals([[start, end]], intervals);
+
+/** Length in hours of the longest interval in a list, 0 when the list is empty. */
+export const longestHours = (intervals) => intervals.reduce((m, [a, b]) => Math.max(m, b - a), 0) / HOUR_MS;
+
+/** The first interval at least `hours` long, or null. One millisecond of slack absorbs float noise at the edges. */
+export function firstAtLeast(intervals, hours) {
+  const need = hours * HOUR_MS - 1;
+  return intervals.find(([a, b]) => b - a >= need) ?? null;
+}
+
+/**
+ * Continuous stretches inside the window. Totals hide how time is split: 30 hours in one piece is a
+ * different plan from 30 hours in short pieces. A stretch that runs into either edge of the window is
+ * cut there, because the model only covers these 72 hours.
+ */
+export function stretchesOf(res) {
+  return {
+    longestBoth: longestHours(res.both.intervals),
+    longestDark: longestHours(gapsIn(res.bodies.sun.lit, res.start, res.end)),
+    longestNoEarth: longestHours(gapsIn(res.bodies.earth.intervals, res.start, res.end)),
+  };
+}
+
 /** Rising / setting events derived from the merged intervals' interior edges. */
 export function crossingEvents(intervals, start, end, body) {
   const ev = [];
@@ -126,6 +151,7 @@ export function analyze(dataset) {
   res.eclipse = { total: eclipseTotal, any: eclipseAny, totalHours: sumHours(eclipseTotal) };
   const both = intersect(lit, res.bodies.earth.intervals);
   res.both = { intervals: both, hours: sumHours(both) };
+  res.stretches = stretchesOf(res);
   res.events = [...res.bodies.sun.events, ...res.bodies.earth.events].sort((x, y) => x.t - y.t);
   const elRange = rows.reduce(
     (r, row) => [Math.min(r[0], row.sunEl, row.earthEl), Math.max(r[1], row.sunEl, row.earthEl)],

@@ -109,13 +109,18 @@ export function initChrome() {
     syncClock();
     root.classList.remove('leaving');
     root.classList.add('arriving');
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        root.classList.remove('arriving');
-        if (page === 'home') home.classList.add('is-in');
-        busy = false;
-      }),
-    );
+    // Frames can stall (a background tab, a slow phone). A timer makes sure the page never stays invisible.
+    let arrived = false;
+    const arrive = () => {
+      if (arrived) return;
+      arrived = true;
+      root.classList.remove('arriving');
+      if (page === 'home') home.classList.add('is-in');
+      else revealOnScreen();
+      busy = false;
+    };
+    requestAnimationFrame(() => requestAnimationFrame(arrive));
+    setTimeout(arrive, 120);
   }
 
   document.addEventListener('click', (e) => {
@@ -156,8 +161,22 @@ export function initChrome() {
   window.addEventListener('resize', syncClock, { passive: true });
 
   // Content rises in once, the first time it comes on screen.
+  // Anything already on screen, or scrolled past, shows at once: the observer alone can lag behind a
+  // page switch or a fast scroll on a phone and leave whole sections blank.
+  let seen = null;
+  function revealOnScreen() {
+    if (!seen) return;
+    document.querySelectorAll('.will-reveal:not(.is-revealed)').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.height === 0 && r.width === 0) return; // hidden on this page
+      if (r.top < window.innerHeight * 0.95) {
+        el.classList.add('is-revealed');
+        seen.unobserve(el);
+      }
+    });
+  }
   if (!reduce && 'IntersectionObserver' in window) {
-    const seen = new IntersectionObserver(
+    seen = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
@@ -165,12 +184,27 @@ export function initChrome() {
           seen.unobserve(entry.target);
         }
       },
-      { rootMargin: '0px 0px -12% 0px' },
+      { rootMargin: '0px 0px -8% 0px' },
     );
     document.querySelectorAll(REVEAL).forEach((el) => {
       el.classList.add('will-reveal');
       seen.observe(el);
     });
+    let pending = false;
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (pending) return;
+        pending = true;
+        setTimeout(() => {
+          pending = false;
+          revealOnScreen();
+        }, 150);
+      },
+      { passive: true },
+    );
+    // A safety net for the first screen if frames are slow to start.
+    setTimeout(revealOnScreen, 600);
   }
 
   // ───────────── Menu: a mask wipe from the right, items slide in, letters unfold ─────────────

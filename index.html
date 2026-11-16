@@ -145,10 +145,11 @@
             <fieldset class="plan" id="plan">
               <legend>Change the plan</legend>
               <div class="plan-row">
-                <label class="plan-f">
-                  <span class="plan-k">Original touchdown, UTC</span>
-                  <input type="datetime-local" id="start-input" step="3600" value="2025-03-15T00:00" disabled />
-                </label>
+                <div class="plan-f plan-date">
+                  <span class="plan-k" id="start-k">Original touchdown, UTC</span>
+                  <input type="datetime-local" id="start-input" step="3600" value="2025-03-15T00:00" disabled hidden tabindex="-1" aria-hidden="true" />
+                  <div class="dp" id="start-picker" data-labelledby="start-k"></div>
+                </div>
                 <label class="plan-f plan-slip">
                   <span class="plan-k">Schedule slip <output class="num" id="slip-out" for="slip-range">9 days</output></span>
                   <input type="range" id="slip-range" min="1" max="30" step="1" value="9" disabled />
@@ -160,13 +161,6 @@
                   <div class="seg" role="radiogroup" aria-labelledby="margin-k" aria-describedby="margin-help" id="margin-picker"></div>
                   <p class="margin-help" id="margin-help">Treat the lowest few degrees of sky as blocked by ridges and crater rims. Every number below reruns.</p>
                 </div>
-              </div>
-              <div class="plan-need">
-                <label class="plan-f plan-slip">
-                  <span class="plan-k">Mission needs, hours with Sun and Earth both up <output class="num" id="need-out" for="need-range">24 h</output></span>
-                  <input type="range" id="need-range" min="0" max="72" step="1" value="24" aria-describedby="need-help" />
-                </label>
-                <p class="margin-help" id="need-help">Power and a radio link at the same time. Set 0 to turn the verdict off.</p>
               </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
@@ -181,8 +175,17 @@
                 <span class="slips-k" id="slips-k">Every slip, 0 to 30 days</span>
                 <span class="slips-legend" aria-hidden="true">
                   <span><i class="sl-sun"></i>Sun</span><span><i class="sl-earth"></i>Earth</span><span><i class="sl-both"></i>Both</span>
+                  <span><i class="sl-ok"></i>Meets your need</span>
                   <span>bar height is hours out of 72</span>
                 </span>
+              </div>
+              <div class="backup" id="backup">
+                <div class="backup-row">
+                  <span class="plan-k" id="need-k">Find a backup window · Sun and Earth up together, without a break, for at least</span>
+                  <div class="seg" role="radiogroup" aria-labelledby="need-k" id="need-picker"></div>
+                </div>
+                <p class="backup-read" id="backup-read" aria-live="polite">Loading the Moon table.</p>
+                <div class="backup-go" id="backup-go"></div>
               </div>
               <div class="slips-grid" data-slips-grid></div>
               <p class="slips-read" data-slips-read aria-live="polite">Loading the Moon table.</p>
@@ -205,6 +208,21 @@
                 </tr>
               </thead>
               <tbody id="metrics-body"></tbody>
+            </table>
+            <table class="stretches">
+              <caption>
+                <span class="cap-in">Longest stretch without a break
+                <span class="cap-note">30 hours in one piece is a different plan from 30 hours in short pieces.</span></span>
+              </caption>
+              <thead class="sr">
+                <tr>
+                  <th scope="col">Stretch</th>
+                  <th scope="col">Original</th>
+                  <th scope="col">Delayed</th>
+                  <th scope="col">Change</th>
+                </tr>
+              </thead>
+              <tbody id="stretch-body"></tbody>
             </table>
           </div>
         </div>
@@ -386,8 +404,9 @@
               The terrain margin raises the line that counts as the horizon to 1, 2 or 5 degrees, as a
               stand-in for ridges and crater rims. It is the same in every direction around the site, so it
               is a what-if, not a measured horizon.
-              The mission need is a single threshold on hours with the Sun and Earth both above the horizon.
-              A stay meets it when its hours are at least the need.
+              The mission need is a number of hours with the Sun and Earth both above the horizon, without a break.
+              A stay meets it when its longest unbroken stretch is at least the need. The go and no go marks,
+              the site table and the backup finder all use this same test.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
             </p>
           </div>

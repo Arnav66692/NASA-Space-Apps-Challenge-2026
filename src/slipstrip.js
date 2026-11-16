@@ -3,7 +3,6 @@
 // Written with an AI tool (Claude).
 import { fmtHours, fmtDay, slipShort } from './format.js';
 import { icon } from './icons.js';
-import { verdict, slipsMeetingNeed } from './plan.js';
 
 const WINDOW_H = 72;
 const LABEL_EVERY = 5;
@@ -14,9 +13,14 @@ const slipName = (cell) => (cell.slipDays === 0 ? 'Original' : `+${slipShort(cel
 
 function cellWords(cell) {
   const eclipse = cell.eclipseHours > 0 ? ` · Sun behind Earth ${fmtHours(cell.eclipseHours)} h` : '';
+  // Say so when the time with both up comes in more than one piece.
+  const split =
+    cell.longestBothHours !== undefined && cell.bothHours - cell.longestBothHours > 0.05
+      ? ` (longest unbroken ${fmtHours(cell.longestBothHours)} h)`
+      : '';
   return (
     `${slipName(cell)} · touchdown ${fmtDay(cell.startMs, { year: true })} · ` +
-    `Sun ${fmtHours(cell.sunHours)} h · Earth ${fmtHours(cell.earthHours)} h · Both ${fmtHours(cell.bothHours)} h${eclipse}`
+    `Sun ${fmtHours(cell.sunHours)} h · Earth ${fmtHours(cell.earthHours)} h · Both ${fmtHours(cell.bothHours)} h${split}${eclipse}`
   );
 }
 
@@ -77,10 +81,9 @@ export function createSlipStrip(root, { onPick }) {
     showSummary();
   }
 
-  function render({ cells: nextCells, rank, needHours = 0 }) {
+  function render({ cells: nextCells, rank }) {
     cells = nextCells;
-    const met = slipsMeetingNeed(cells, needHours);
-    summary = summaryWords(cells, rank) + (met ? ` ${met.meet} of ${met.of} slips give at least ${needHours} h with both up.` : '');
+    summary = summaryWords(cells, rank);
     grid.innerHTML = cells
       .map((c) => {
         const mark = rank && c.slipDays === rank.best ? 'best' : rank && c.slipDays === rank.worst ? 'worst' : '';
@@ -89,13 +92,13 @@ export function createSlipStrip(root, { onPick }) {
           ? `<span class="slip-mark ${mark}" aria-hidden="true">${mark === 'best' ? '▲' : '▼'}</span>`
           : '';
         const markWords = mark === 'best' ? ' Most hours with both up.' : mark === 'worst' ? ' Fewest hours with both up.' : '';
-        const v = verdict(c.bothHours, needHours);
-        const needWords = v === 'go' ? ' Meets the mission need.' : v === 'nogo' ? ' Falls short of the mission need.' : '';
-        return `<button type="button" class="slip-cell ${labelled} ${mark ? `is-${mark}` : ''} ${v === 'nogo' ? 'misses' : ''}" data-slip="${c.slipDays}" aria-label="${cellWords(c)}.${markWords}${needWords}">
+        const label = `${cellWords(c)}.${markWords}`;
+        return `<button type="button" class="slip-cell ${labelled} ${mark ? `is-${mark}` : ''}" data-slip="${c.slipDays}" data-label="${label}" aria-label="${label}">
           ${markHtml}
           <span class="slip-bars" aria-hidden="true">
             <i class="sb sun" style="--h:${pctOf(c.sunHours)}"></i><i class="sb earth" style="--h:${pctOf(c.earthHours)}"></i><i class="sb both" style="--h:${pctOf(c.bothHours)}"></i>
           </span>
+          <span class="slip-ok" aria-hidden="true"></span>
           <span class="slip-d num" aria-hidden="true">${c.slipDays}</span>
         </button>`;
       })
@@ -127,5 +130,19 @@ export function createSlipStrip(root, { onPick }) {
     });
   }
 
-  return { render, update, message };
+  /** Mark the slips that meet the backup finder's need, and its earliest pick. */
+  function markNeed({ ok, pick }) {
+    grid.querySelectorAll('[data-slip]').forEach((button) => {
+      const k = Number(button.dataset.slip);
+      const meets = ok.has(k);
+      button.classList.toggle('is-ok', meets);
+      button.classList.toggle('is-pick', k === pick);
+      button.setAttribute(
+        'aria-label',
+        `${button.dataset.label}${meets ? ' Meets your need.' : ''}${k === pick ? ' Earliest backup.' : ''}`,
+      );
+    });
+  }
+
+  return { render, update, message, markNeed };
 }

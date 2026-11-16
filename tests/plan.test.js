@@ -8,8 +8,8 @@ import { dirname, join } from 'node:path';
 import { createEphemeris } from '../src/moonsky.js';
 import { SITES, PRESET_START_MS } from '../src/data.js';
 import { HOUR_MS } from '../src/calc.js';
-import { analyzeStay, slipSeries } from '../src/slips.js';
-import { verdict, siteRows, slipsMeetingNeed, planCsv, NEED_DEFAULT_H } from '../src/plan.js';
+import { analyzeStay, slipSeries, meetsNeed, NEED_HOURS, DEFAULT_NEED_HOURS } from '../src/slips.js';
+import { verdict, siteRows, planCsv } from '../src/plan.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const meta = JSON.parse(readFileSync(join(ROOT, 'data', 'ephemeris.json'), 'utf8'));
@@ -28,7 +28,7 @@ describe('verdict', () => {
     expect(verdict(72, 72)).toBe('go');
     expect(verdict(0, 1)).toBe('nogo');
     expect(verdict(50, 0)).toBe(null);
-    expect(NEED_DEFAULT_H).toBe(24);
+    expect(DEFAULT_NEED_HOURS).toBe(24);
   });
 });
 
@@ -44,7 +44,8 @@ describe('every site on the same plan', () => {
       expect(r.earth).toEqual([pair.original.bodies.earth.hours, pair.delayed.bodies.earth.hours]);
       expect(r.both).toEqual([pair.original.both.hours, pair.delayed.both.hours]);
       expect(r.change).toBe(pair.delayed.both.hours - pair.original.both.hours);
-      expect(r.verdict).toEqual([verdict(r.both[0], 24), verdict(r.both[1], 24)]);
+      expect(r.longest).toEqual([pair.original.stretches.longestBoth, pair.delayed.stretches.longestBoth]);
+      expect(r.verdict).toEqual([verdict(r.longest[0], 24), verdict(r.longest[1], 24)]);
     }
   });
 
@@ -60,13 +61,14 @@ describe('every site on the same plan', () => {
   });
 });
 
-describe('slips meeting the need', () => {
-  it('counts slips of 1 day or more only', () => {
-    const cells = slipSeries(eph, SITES.athena, PRESET_START_MS, 30);
-    const met = slipsMeetingNeed(cells, 24);
-    expect(met.of).toBe(30);
-    expect(met.meet).toBe(cells.filter((c) => c.slipDays >= 1 && c.bothHours >= 24).length);
-    expect(slipsMeetingNeed(cells, 0)).toBe(null);
+describe('verdict and the backup finder agree', () => {
+  it('gives go exactly when meetsNeed is true, for every slip, site and need choice', () => {
+    for (const site of Object.values(SITES)) {
+      const cells = slipSeries(eph, site, PRESET_START_MS, 30);
+      for (const need of NEED_HOURS) {
+        for (const c of cells) expect(verdict(c.longestBothHours, need) === 'go').toBe(meetsNeed(c, need));
+      }
+    }
   });
 });
 
@@ -87,7 +89,8 @@ describe('CSV', () => {
   it('writes the same hours the analysis gives, to two decimals', () => {
     const row9 = lines.find((l) => l.startsWith('9,'));
     const c9 = cells.find((c) => c.slipDays === 9);
-    expect(row9.split(',').slice(2, 5)).toEqual([c9.sunHours, c9.earthHours, c9.bothHours].map((h) => h.toFixed(2)));
+    expect(row9.split(',').slice(2, 6)).toEqual([c9.sunHours, c9.earthHours, c9.bothHours, c9.longestBothHours].map((h) => h.toFixed(2)));
+    expect(row9.split(',').at(-1)).toBe(verdict(c9.longestBothHours, 24));
   });
 
   it('quotes fields that contain commas', () => {
