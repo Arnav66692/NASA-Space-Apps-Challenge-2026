@@ -319,6 +319,7 @@ html[data-page="home"] .hero-copy,
 html[data-page="home"] .instrument,
 html[data-page="home"] .replay,
 html[data-page="home"] .methods,
+html[data-page="home"] .sites,
 html[data-page="home"] .foot { display: none; }
 html[data-page="home"] .globe-wrap { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100lvh; min-height: 0; margin: 0; }
 html[data-page="home"] .globe { inset: 0; cursor: default; }
@@ -695,6 +696,9 @@ select option:disabled { color: #8d8986; }
 .sites-table th, .sites-table td { border-top: 1px solid var(--night-line); padding: 0.95rem 0.6rem 0.95rem 0; vertical-align: middle; }
 .sites-table td.num { text-align: right; white-space: nowrap; font-size: 1.15rem; letter-spacing: -0.02em; }
 .sites-table td:last-child, .sites-table thead th:last-child { padding-left: 1.4rem; }
+.sites-table th.num, .sites-table td.num { padding-left: 1rem; }
+#sites-body tr { cursor: pointer; }
+#sites-body tr:hover .sites-pick { text-decoration: underline; text-underline-offset: 0.25em; }
 .sites-to { margin: 0 0.35rem; color: var(--night-2); font-size: 0.8rem; }
 .sites-pick { display: grid; gap: 0.15rem; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-size: 1.15rem; letter-spacing: -0.02em; color: var(--night-ink); }
 .sites-pick:hover { text-decoration: underline; text-underline-offset: 0.25em; }

@@ -377,7 +377,7 @@ function renderSites(o, d) {
       const changeCls = change === '0' ? 'zero' : r.change < 0 ? 'neg' : 'pos';
       const v = r.verdict[1];
       const verdictCell = v ? `<span class="verdict ${v}">${v === 'go' ? 'Go' : 'No go'}</span>` : '<span class="muted">No need set</span>';
-      return `<tr class="${r.id === state.site ? 'is-current' : ''}">
+      return `<tr class="${r.id === state.site ? 'is-current' : ''}" data-site-row="${r.id}">
         <th scope="row"><button type="button" class="sites-pick" data-pick-site="${r.id}">${r.name}<span class="sites-region">${r.region}</span></button></th>
         <td class="num col-sun">${fmtPair(r.sun)}</td>
         <td class="num col-earth">${fmtPair(r.earth)}</td>
@@ -389,10 +389,11 @@ function renderSites(o, d) {
     .join('');
 }
 $('#sites-body').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-pick-site]');
-  if (!b) return;
+  // The whole row opens its site. The name is a real button, so keyboards reach it.
+  const row = e.target.closest('[data-site-row]');
+  if (!row) return;
   stopAnim();
-  setState({ site: b.dataset.pickSite, transition: true });
+  setState({ site: row.dataset.siteRow, transition: true });
   document.getElementById('navigator').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
 });
 
