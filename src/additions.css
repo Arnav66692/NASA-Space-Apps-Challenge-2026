@@ -1,6 +1,6 @@
 /* Additions on top of unseen.css: the backup finder, unbroken stretches, easier timelines,
    loading placeholders for the 3D views, and the phone order. Kept in one file so it merges cleanly.
-   Written with an AI tool (Claude). */
+   Written with an AI tool. */
 
 /* ───────────── Touchdown picker ─────────────
    Replaces the browser's date-time pop-up. Same parts as the rest of the page: hairlines on near-black,
@@ -237,6 +237,10 @@ body:not(.has-3d):not(.no-3d) .surface-wrap::before {
   .globe-wrap { order: 11; margin-top: 3rem; position: relative; top: auto; }
   .instrument > .sky { order: 12; margin-top: 2.5rem; }
   .instrument > .clock { order: 13; margin-left: 0.6rem; margin-right: 0.6rem; }
+  /* The every-site table sits after the 3D views on phones, as it does on desktop. Without an order it
+     would jump to the top of the page, above the question. */
+  html[data-page="tool"] .sites { order: 14; }
+  html[data-page="tool"] .calendar { order: 15; } /* ── calendar ── */
   html[data-page="tool"] .replay { order: 20; margin-top: 3rem; }
   html[data-page="tool"] .methods { order: 21; }
   html[data-page="tool"] .home { order: 0; }

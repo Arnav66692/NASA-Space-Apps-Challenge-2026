@@ -13,21 +13,40 @@ export const isAbove = (el, level = 0) => el > level;
 /** Margins the app offers: the lowest N degrees of sky blocked by terrain. 0 is the smooth horizon. */
 export const HORIZON_MARGINS = [0, 1, 2, 5];
 
+// ── terrain ──
+/**
+ * Height of a terrain skyline at an azimuth, by linear interpolation between whole degrees.
+ * @param {number[]} profile 360 elevation angles in degrees, index = azimuth clockwise from north
+ * @param {number} azDeg azimuth in degrees, any range
+ * @returns {number} degrees
+ */
+export function horizonAt(profile, azDeg) {
+  const a = ((azDeg % 360) + 360) % 360;
+  const i = Math.floor(a);
+  const f = a - i;
+  const h0 = profile[i % 360];
+  const h1 = profile[(i + 1) % 360];
+  return h0 + (h1 - h0) * f;
+}
+
 /**
  * Steps 2–3 — above-horizon intervals for one body, with linear interpolation
  * of each crossing. Touching intervals are merged so an exact 0° sample does
  * not create a spurious gap.
  * @returns {Array<[number, number]>} [startMs, endMs] pairs
  */
-export function aboveIntervals(rows, body, level = 0) {
+export function aboveIntervals(rows, body, level = 0, profile = null) {
   const k = EL_KEY[body];
+  const az = AZ_KEY[body];
+  // ── terrain ── with a profile the blocked line is the skyline in the body's direction, plus the margin.
+  const lineAt = profile ? (row) => level + horizonAt(profile, row[az]) : () => level;
   const raw = [];
   for (let i = 0; i < rows.length - 1; i++) {
     const { t: t0 } = rows[i];
     const { t: t1 } = rows[i + 1];
     // Elevations are measured from the blocked line, so the crossing is interpolated against it.
-    const e0 = rows[i][k] - level;
-    const e1 = rows[i + 1][k] - level;
+    const e0 = rows[i][k] - lineAt(rows[i]);
+    const e1 = rows[i + 1][k] - lineAt(rows[i + 1]);
     const a0 = isAbove(e0);
     const a1 = isAbove(e1);
     if (a0 && a1) raw.push([t0, t1]);
@@ -124,9 +143,11 @@ export function analyze(dataset) {
   const start = rows[0].t;
   const end = rows.at(-1).t;
   const horizonDeg = dataset.horizonDeg ?? 0;
+  // ── terrain ── optional skyline (360 degrees by azimuth). The margin, if any, is added on top of it.
+  const profile = Array.isArray(dataset.horizonProfile) && dataset.horizonProfile.length === 360 ? dataset.horizonProfile : null;
   const res = { ...dataset, horizonDeg, start, end, bodies: {} };
   for (const body of BODIES) {
-    const intervals = aboveIntervals(rows, body, horizonDeg);
+    const intervals = aboveIntervals(rows, body, horizonDeg, profile);
     const hours = sumHours(intervals);
     const totalH = (end - start) / HOUR_MS;
     res.bodies[body] = {

@@ -1,7 +1,7 @@
 // Every slip at a glance: the same 72 hour analysis, run once per day of delay.
 // Uses the same row builder and calculation contract as the main comparison, so
 // a cell and the table next to it cannot disagree.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { analyze, firstAtLeast, HOUR_MS } from './calc.js';
 import { buildRows, WINDOW_HOURS } from './window.js';
 import { eclipseIntervals } from './eclipse.js';
@@ -68,12 +68,14 @@ export function analyzeStay(eph, site, startMs, extra = {}) {
  * end of the Moon table are left out.
  * @returns {Array<{slipDays:number,startMs:number,sunHours:number,earthHours:number,bothHours:number,eclipseHours:number}>}
  */
-export function slipSeries(eph, site, startMs, maxSlipDays, horizonDeg = 0) {
+export function slipSeries(eph, site, startMs, maxSlipDays, horizonDeg = 0, horizonProfile = null) {
   const cells = [];
+  // ── terrain ── the skyline is passed only when there is one, so the smooth path is unchanged.
+  const extra = horizonProfile ? { horizonDeg, horizonProfile } : { horizonDeg };
   for (let k = 0; k <= maxSlipDays; k += 1) {
     const t0 = startMs + k * DAY_MS;
     if (t0 + WINDOW_HOURS * HOUR_MS > eph.endMs) break;
-    cells.push(slipCell(k, analyzeStay(eph, site, t0, { horizonDeg })));
+    cells.push(slipCell(k, analyzeStay(eph, site, t0, extra)));
   }
   return cells;
 }

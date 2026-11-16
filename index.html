@@ -9,13 +9,23 @@
       content="What changes in the first 72 hours on the Moon if touchdown slips nine days? Sun and Earth visibility at real landing sites from NASA JPL Horizons."
     />
     <meta name="theme-color" content="#07090c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Long Shadow" />
+    <meta property="og:title" content="Long Shadow · What a slipped Moon landing costs" />
+    <meta property="og:description" content="Pick any landing site, date and delay. See the hours of Sun and Earth in the first 72 hours, from NASA JPL Horizons data." />
+    <meta property="og:url" content="https://long-shadow-moon.vercel.app/" />
+    <meta property="og:image" content="https://long-shadow-moon.vercel.app/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A crescent Moon over the words Touchdown slips, the sky moves on" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23d9d6cf'/%3E%3Cpath d='M16 3a13 13 0 0 1 0 26z' fill='%2307090c'/%3E%3C/svg%3E" />
     <script>
       (function () {
         var d = document.documentElement;
         var h = location.hash.slice(1);
         var q = location.search.replace(/^\?/, '').split('&').filter(function (p) { return p && p.indexOf('look=') !== 0; });
-        var tool = ['navigator', 'instrument', 'replay', 'methods'].indexOf(h) > -1 || (!h && q.length > 0);
+        var tool = ['navigator', 'sites', 'calendar', 'instrument', 'replay', 'methods', 'checks'].indexOf(h) > -1 || (!h && q.length > 0);
         d.dataset.page = tool ? 'tool' : 'home';
         d.classList.add('js');
         if (!tool && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('intro-on', 'entering');
@@ -48,6 +58,8 @@
         <a class="nav-item" href="#replay" data-roll>Replay</a>
         <a class="nav-item" href="#methods" data-roll>Methods</a>
       </nav>
+      <!-- sound -->
+      <button class="sound-pill" type="button" aria-pressed="false" aria-label="Sound" data-sound><span class="sound-pill__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span aria-hidden="true">Sound</span><span class="sound-pill__state" aria-hidden="true" data-sound-state>Off</span></button>
       <button class="disc disc--menu" type="button" aria-expanded="false" aria-controls="menu" data-menu-toggle>
         <span class="disc__fill" aria-hidden="true"></span>
         <span class="disc__dots" aria-hidden="true"><i></i><i></i></span>
@@ -97,7 +109,7 @@
       <section class="hero" id="navigator" aria-labelledby="q">
         <div class="hero-copy">
           <p class="eyebrow">NASA Space Apps 2026 · Lunar Landing Site Navigator</p>
-          <h1 id="q">What changes in the first 72&nbsp;hours on the Moon if touchdown slips <em id="slip-words">nine days</em>?</h1>
+          <h1 id="q">What changes in the first <span id="stay-words">72&nbsp;hours</span> on the Moon if touchdown slips <em id="slip-words">nine days</em>?</h1>
 
           <p class="answer" id="answer" aria-live="polite"></p>
 
@@ -128,6 +140,7 @@
                 <span class="td-k">Original touchdown</span>
                 <span class="td-v num" id="td-original-date">Mar 15, 2025</span>
                 <span class="td-time num" id="td-original-time">00:00 UTC</span>
+                <span class="td-verdict" id="td-original-verdict" hidden></span>
               </button>
               <button class="apply" id="apply-delay" type="button">
                 <span class="apply-label">Apply +9 days</span>
@@ -137,6 +150,7 @@
                 <span class="td-k">Delayed touchdown</span>
                 <span class="td-v num" id="td-delayed-date">Mar 24, 2025</span>
                 <span class="td-time num" id="td-delayed-time">00:00 UTC</span>
+                <span class="td-verdict" id="td-delayed-verdict" hidden></span>
               </button>
             </div>
 
@@ -159,17 +173,33 @@
                   <div class="seg" role="radiogroup" aria-labelledby="margin-k" aria-describedby="margin-help" id="margin-picker"></div>
                   <p class="margin-help" id="margin-help">Treat the lowest few degrees of sky as blocked by ridges and crater rims. Every number below reruns.</p>
                 </div>
+                <!-- ── terrain ── -->
+                <span class="plan-k" id="terrain-k">Horizon</span>
+                <div class="margin-row">
+                  <div class="seg" role="radiogroup" aria-labelledby="terrain-k" aria-describedby="terrain-help" id="terrain-picker">
+                    <button type="button" role="radio" data-terrain="0" aria-checked="true"><span class="sp-name">Smooth</span></button>
+                    <button type="button" role="radio" data-terrain="1" aria-checked="false"><span class="sp-name">LOLA terrain</span></button>
+                  </div>
+                  <p class="margin-help" id="terrain-help">LOLA terrain uses the real skyline around the site, from NASA elevation data. Any margin is added on top.</p>
+                </div>
+                <!-- ── stay length ── -->
+                <span class="plan-k" id="stay-k">Stay length</span>
+                <div class="margin-row">
+                  <div class="seg" role="radiogroup" aria-labelledby="stay-k" aria-describedby="stay-help" id="stay-picker"></div>
+                  <p class="margin-help" id="stay-help">The comparison, the timelines and the mission clock cover this length. A lunar day is 709 hours. The slip strip, the backup finder, the calendar and the site table use the first 72 hours.</p>
+                </div>
               </div>
               <div class="plan-foot">
                 <span class="plan-msg" id="plan-msg" role="status">Loading the Moon table for other sites and dates.</span>
                 <button type="button" class="link-btn" id="plan-reset" hidden>Reset to Mar 15, 2025 and 9 days</button>
                 <button type="button" class="link-btn" id="copy-link">Copy link to this view</button>
+                <button type="button" class="link-btn" id="download-csv">Download data (CSV)</button>
               </div>
             </fieldset>
 
             <div class="slips" id="slips" role="group" aria-labelledby="slips-k">
               <div class="slips-head">
-                <span class="slips-k" id="slips-k">Every slip, 0 to 30 days</span>
+                <span class="slips-k" id="slips-k">Every slip, 0 to 30 days, first 72 hours</span>
                 <span class="slips-legend" aria-hidden="true">
                   <span><i class="sl-sun"></i>Sun</span><span><i class="sl-earth"></i>Earth</span><span><i class="sl-both"></i>Both</span>
                   <span><i class="sl-ok"></i>Meets your need</span>
@@ -193,8 +223,9 @@
           <div class="metrics" id="metrics">
             <table>
               <caption>
-                <span class="cap-in">Hours above the horizon in the first 72&nbsp;h
-                <a class="model-tag" href="#methods">Smooth-horizon estimate</a></span>
+                <span class="cap-in">Hours above the horizon in the first <span id="stay-words-metrics">72&nbsp;hours</span>
+                <a class="model-tag" href="#methods">Smooth-horizon estimate</a>
+                <a class="check-tag" href="#checks">Checked against JPL</a></span>
               </caption>
               <thead>
                 <tr>
@@ -221,11 +252,14 @@
               </thead>
               <tbody id="stretch-body"></tbody>
             </table>
+            <div class="dsn-panel" id="dsn-panel" hidden></div><!-- dsn -->
+            <div class="relay-panel" id="relay-panel" hidden></div><!-- relay -->
           </div>
         </div>
 
         <figure class="globe-wrap" aria-labelledby="globe-cap">
           <div class="globe" id="globe" role="img" aria-label="3D Moon globe"></div>
+          <div class="heat-legend" id="heat-legend" hidden></div><!-- ── heatmap ── -->
           <div class="globe-hud" aria-hidden="true">
             <span class="hud-scn" id="globe-scn"></span>
             <span class="hud-t num" id="globe-t"></span>
@@ -234,15 +268,50 @@
             <span class="lg"><i class="sw sw-term"></i>Sunrise / sunset line</span>
             <span class="lg"><i class="sw sw-limb"></i>Earth on the horizon</span>
             <div class="seg look-switch" role="radiogroup" aria-label="Look of the 3D views" data-look-switch></div>
+            <!-- ── heatmap ── -->
+            <div class="seg heat-switch"><button type="button" role="switch" aria-checked="false" data-heatmap-toggle title="Tint the Moon by the longest stretch with Sun and Earth both up"><span class="sp-name">Heatmap</span></button></div>
             <span class="lg-note">Drag to rotate. Lighting from JPL Sun direction at the selected instant.</span>
           </figcaption>
         </figure>
       </section>
 
       <!-- ───────────── Instrument: timelines + sky ───────────── -->
+      <!-- ───────────── Every site on the same plan ───────────── -->
+      <section class="sites" id="sites" aria-labelledby="sites-h">
+        <header class="sec-head">
+          <h2 id="sites-h">Every site, same plan</h2>
+          <p class="sec-sub" id="sites-sub">The same touchdown and slip at every landing site, best delayed stay first. Pick a row to open that site.</p>
+        </header>
+        <div class="sites-wrap">
+          <table class="sites-table">
+            <caption class="sr">Hours above the horizon in the first 72 hours at every site, original and delayed touchdown</caption>
+            <thead>
+              <tr>
+                <th scope="col">Site</th>
+                <th scope="col" class="num col-sun">Sun</th>
+                <th scope="col" class="num col-earth">Earth</th>
+                <th scope="col" class="num">Both</th>
+                <th scope="col" class="num">Change</th>
+                <th scope="col">Verdict</th>
+              </tr>
+            </thead>
+            <tbody id="sites-body"><tr><td colspan="6" class="sites-wait">Loading the Moon table.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── calendar ── Every touchdown day at the current site -->
+      <section class="calendar" id="calendar" aria-labelledby="cal-h">
+        <header class="sec-head">
+          <h2 id="cal-h">Every date, this site</h2>
+          <p class="sec-sub">The same 72 hour check for a touchdown at 00:00 UTC on every day from 2024 to 2030. Brighter days give a longer unbroken stretch with the Sun and Earth both up, and a green ring marks the days that meet the need. Pick a day to make it the touchdown.</p>
+        </header>
+        <div class="cal-wrap" id="cal-root"></div>
+      </section>
+
       <section class="instrument" id="instrument" aria-labelledby="inst-h">
         <header class="sec-head">
-          <h2 id="inst-h">The first 72 hours, side by side</h2>
+          <h2 id="inst-h">The first <span id="stay-words-inst">72 hours</span>, side by side</h2>
           <p class="sec-sub">
             Bars show when each body is above the modeled horizon. Click a timeline or use the mission clock to
             move through the stay. <a class="model-tag" href="#methods">Smooth-horizon estimate</a>
@@ -301,7 +370,7 @@
           <output class="clock-read num" id="clock-read" for="scrubber"></output>
           <p id="scrub-help" class="sr">
             Arrow keys move one hour. Shift plus arrow moves ten minutes. Page Up and Page Down move six hours. Home and
-            End jump to touchdown and to hour 72.
+            End jump to touchdown and to hour <span id="scrub-end-help">72</span>.
           </p>
         </div>
       </section>
@@ -332,7 +401,7 @@
               <span class="num" id="rp-eclipse-model">06:18 to 08:35 UTC</span>. The reported totality for the
               whole Moon was 06:26 to 07:31 UTC, and the model window covers it. A single site sits in Earth's
               shadow longer than the whole Moon stays fully covered, so we say covers, not matches.
-              <a href="https://svs.gsfc.nasa.gov/5471" target="_blank" rel="noopener">NASA SVS: eclipse times ↗</a>
+              <a href="https://science.nasa.gov/solar-system/moon/what-you-need-to-know-about-the-march-2025-total-lunar-eclipse/" target="_blank" rel="noopener">NASA Science: eclipse times ↗</a>
             </p>
             <button class="btn btn--ghost" id="eclipse-btn" type="button" data-pill disabled>Replay the eclipse</button>
           </div>
@@ -366,6 +435,20 @@
         <p class="m-lede"><strong>Smooth-horizon estimate.</strong> Local terrain and lander hardware are outside this model.</p>
         <div class="m-grid">
           <div>
+            <h3>Why it matters</h3>
+            <p>
+              Most landers run on sunlight and talk to Earth by direct radio, so the hours with the Sun and Earth
+              up are the hours a mission can work. Intuitive Machines' Athena landed near Mons Mouton on
+              March 6, 2025, on its side in a cold crater where its solar panels could not recharge it. Its
+              batteries ran down and the mission ended about 13 hours after landing. NASA's October 2024 list of
+              nine Artemis III candidate regions includes Mons Mouton and Mons Mouton Plateau.
+              Solar landers are usually built for one lunar day of about 14 Earth days. Blue Ghost stopped
+              after sunset on March 16, 2025, and Chandrayaan-3 never woke after its first night in 2023.
+              <a href="https://www.nasa.gov/news-release/nasa-receives-some-data-before-intuitive-machines-ends-lunar-mission/" target="_blank" rel="noopener">NASA: Athena mission ends ↗</a>
+              <a href="https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/" target="_blank" rel="noopener">NASA: Artemis III regions ↗</a>
+            </p>
+          </div>
+          <div>
             <h3>What the numbers mean</h3>
             <p>
               <strong>Sun above horizon</strong> marks a geometric opportunity for solar power.
@@ -377,7 +460,32 @@
               The terrain margin raises the line that counts as the horizon to 1, 2 or 5 degrees, as a
               stand-in for ridges and crater rims. It is the same in every direction around the site, so it
               is a what-if, not a measured horizon.
+              <!-- ── terrain ── -->
+              The LOLA terrain horizon replaces the flat line with the skyline seen from 2 m above the ground at each
+              built-in site, traced out to 150 km over NASA's LOLA elevation map (CGI Moon Kit, 16 pixels per degree,
+              Moon curvature included). That map has about 1.9 km pixels north to south, so near the poles small ridges
+              and crater rims are smoothed and the skyline is an estimate. Custom points use the smooth horizon.
+              The mission need is a number of hours with the Sun and Earth both above the horizon, without a break.
+              A stay meets it when its longest unbroken stretch is at least the need. The go and no go marks,
+              the site table and the backup finder all use this same test.
               <a href="https://science.nasa.gov/resource/shadows-near-the-moons-south-pole/" target="_blank" rel="noopener">NASA: shadows near the south pole ↗</a>
+            </p>
+            <!-- relay -->
+            <p>
+              <strong>Far-side relay.</strong> Earth does not rise on the far side, so a lander there talks to Earth
+              through a relay satellite. The relay panel uses an illustrative orbit, because the exact orbits are not public.
+              Chang'e 4 uses Queqiao, in a halo orbit around the Earth-Moon L2 point about 65,000 km from the Moon.
+              The model puts Queqiao on a 13,000 km circle around the point opposite Earth, with a 14 day period.
+              The size, the period and the phase are assumptions.
+              Chang'e 6 and custom far-side points use Queqiao-2, in a 24 hour frozen orbit of 200 km by 16,000 km,
+              inclined 55 degrees, with the closest point over the north. The orbit plane is fixed to the stars, and its
+              node and phase are assumptions. Other sources give a different measured orbit.
+              The relay counts as in view when it is above the smooth horizon, checked every 10 minutes.
+              The model assumes that the relay always sees Earth.
+              <a href="https://www.planetary.org/articles/20180615-queqiao-orbit-explainer" target="_blank" rel="noopener">Planetary Society: Queqiao orbit ↗</a>
+              <a href="https://www.universetoday.com/166339/chinas-relay-satellite-is-in-lunar-orbit/" target="_blank" rel="noopener">Universe Today: Queqiao-2 orbit ↗</a>
+              <a href="https://spacenews.com/?p=356862" target="_blank" rel="noopener">SpaceNews: Queqiao-2 inclination ↗</a>
+              <a href="https://en.wikipedia.org/wiki/Queqiao_2" target="_blank" rel="noopener">Wikipedia: Queqiao-2 ↗</a>
             </p>
           </div>
           <div>
@@ -390,6 +498,8 @@
               (<code>QUANTITIES=4</code>), UTC. Azimuth runs clockwise from north. Site coordinates from
               <a href="https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html" target="_blank" rel="noopener">NASA NSSDCA ↗</a>.
               The CSVs ship with the site and the collector script (<code>Get-LunarHorizons.ps1</code>) regenerates them.
+              Raw JPL files: <a href="data/athena-original.csv">Athena original</a>, <a href="data/athena-delayed.csv">Athena delayed</a>,
+              <a href="data/blue-ghost-original.csv">Blue Ghost original</a>, <a href="data/blue-ghost-delayed.csv">Blue Ghost delayed</a>.
             </p>
             <p>
               Every other site, date and slip is computed in the browser from one bundled table. It holds the
@@ -408,8 +518,18 @@
               change is <em>delayed − original</em>, rounded only for display. Between samples the sky view
               interpolates elevation linearly and azimuth along the shorter arc.
             </p>
+            <!-- dsn -->
+            <p>
+              Deep Space Network link. Earth above the site horizon is not enough. A DSN antenna on Earth must also
+              see the Moon. The app computes the Moon's apparent elevation from the 70 m antennas at Goldstone (DSS-14),
+              Madrid (DSS-63) and Canberra (DSS-43) every 5 minutes. It uses the lunar series in Meeus, Astronomical
+              Algorithms, chapter 47, with nutation and sidereal time. A complex counts when the Moon is 10° or more
+              above its horizon. Link hours are the hours with Earth up at the site and at least one complex on the Moon.
+              The elevations agree with JPL Horizons within 0.004° at 30 test times in March 2025.
+            </p>
+            <!-- /dsn -->
           </div>
-          <div>
+          <div id="checks">
             <h3>Checks completed</h3>
             <p>
               Automated tests reproduce every reference total and crossing for all four presets (wholly above,

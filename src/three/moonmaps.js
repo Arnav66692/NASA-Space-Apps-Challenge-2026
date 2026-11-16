@@ -2,7 +2,7 @@
 // laser altimeter elevation. Both come from NASA's CGI Moon Kit (NASA's Scientific Visualization
 // Studio, https://svs.gsfc.nasa.gov/4720/) and are built by tools/build_moon_maps.py.
 // Both maps are centred on 0 degrees longitude, which is what geo.js expects.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import * as THREE from 'three';
 import colorUrl from './moon/moon-color.webp?url';
 import reliefUrl from './moon/moon-relief.webp?url';

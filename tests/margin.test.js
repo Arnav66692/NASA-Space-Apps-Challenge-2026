@@ -1,4 +1,4 @@
-// Checks for the terrain margin. Written with an AI tool (Claude).
+// Checks for the terrain margin. Written with an AI tool.
 // Bars were fixed before the first run (Nov 15 2026, 1:55 PM PT):
 //  1. Margin 0 gives exactly the same totals and crossings as before.
 //  2. Crossings found against the blocked line agree within 2 minutes with an independent

@@ -1,5 +1,5 @@
 // Fetch the JPL Horizons answers for the P1 sites and dates and save them.
-// The 10 sites and 10 dates were fixed before the check ran. Written with an AI tool (Claude).
+// The 10 sites and 10 dates were fixed before the check ran. Written with an AI tool.
 // Run: node tools/fetch_p1_reference.mjs
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";

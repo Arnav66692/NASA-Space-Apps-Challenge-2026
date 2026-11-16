@@ -3,7 +3,7 @@
 // the frame is lens-shifted upward (the lander moves into the lower part of the
 // picture, verticals stay vertical) and the field of view widens only as far as
 // the sky needs. Pure math (no three.js) so it can be checked in Node.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 
 const D2R = Math.PI / 180;
 
@@ -24,10 +24,12 @@ export const FIT = {
   homeElev: 6, // preferred camera elevation when the sky allows any
 };
 
-// Points on the lander that must stay on screen: footpads, solar wing tip, dish, deck.
+// Points on the lander that must stay on screen: footpad rims, both corners of the solar wing tip,
+// the dish rim, a whip antenna tip and the body sides. Measured from buildDetailedLander in
+// surfaceLook.js (Nov 15 2026). Update these if the lander changes shape.
 const LANDER_PTS = [
-  [1.42, 0.05, 1.42], [-1.42, 0.05, 1.42], [1.42, 0.05, -1.42], [-1.42, 0.05, -1.42],
-  [2.75, 2.35, -0.2], [-0.45, 3.55, -0.35], [0, 3.45, 0], [1.05, 1.5, 0], [-1.05, 1.5, 0],
+  [1.73, 0.05, 1.73], [-1.73, 0.05, 1.73], [1.73, 0.05, -1.73], [-1.73, 0.05, -1.73],
+  [2.98, 2.83, -0.65], [2.98, 2.83, 0.33], [-0.5, 3.86, -0.07], [-0.85, 3.37, 0.2], [1.05, 1.6, 0], [-1.05, 1.6, 0],
 ];
 
 /** Vertical field-of-view range for a panel shape. Portrait panels may go taller while the width stays sane. */

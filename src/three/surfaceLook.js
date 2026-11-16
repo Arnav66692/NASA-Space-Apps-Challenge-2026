@@ -2,7 +2,7 @@
 // gold foil that reflects the grey ground, a true-size Sun with glare, Earth with an atmosphere rim,
 // the Milky Way, and a light grain and vignette. Everything is generated in code, no images.
 // The Sun and Earth positions, the camera and the framing stay in surface.js and are unchanged.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';

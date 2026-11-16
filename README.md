@@ -40,6 +40,9 @@ The live site is a Vercel project named `long-shadow-moon`. It is not connected 
 | Hero | The question, the computed answer for the selected site, the site picker, both touchdown dates, **Apply +9 days**, and the three-metric comparison |
 | Change the plan | More landing sites, custom coordinates, a touchdown date and time in UTC, and a slip slider from 1 to 30 days. Every view below follows. **Copy link** shares the exact view |
 | Slip strip | One cell per day of delay, 0 to 30, each with Sun, Earth and both hours on the same 72 h scale. The slips with the most and the fewest hours with both up are marked. Click a cell to set the slip |
+| Mission need | A slider for how many hours the mission needs with the Sun and Earth both up (24 by default, 0 turns it off). Each touchdown card shows Go or No go, the answer says what the slip does to the verdict, and the slip strip dims every slip that falls short |
+| Every site, same plan | A table of all nine sites (and a custom point) for the same touchdown, slip and margin, best delayed stay first, with the verdict for each. Pick a row to open that site |
+| Download data | A CSV of the plan, every slip from 0 to 30 days and every site, with the verdicts |
 | Terrain margin | A setting that treats the lowest 0, 1, 2 or 5 degrees of sky as blocked, as a stand-in for ridges and crater rims. Every number reruns against the raised line: the answer, the table, the timelines, the slip strip and the horizon strip. It is the same in every direction, so it is a what-if, not a measured horizon |
 | Eclipse flag | When Earth passes in front of the Sun (a lunar eclipse seen from the surface), the timeline marks it and the time the Sun is fully covered is counted as no sunlight |
 | 3D globe | Moon lit by the JPL Sun direction at the selected instant. The gold line is sunrise/sunset and the dashed blue line is where Earth sits on the horizon. Applying the delay sweeps the terminator across the Moon |
@@ -96,7 +99,7 @@ docs/HANDOFF.md   the original build brief
 
 ## Verification
 
-`npm test` runs 47 tests, and all pass. The first 16 cover the four presets. They reproduce the brief's full-precision totals for all four presets (Blue Ghost Sun 44.177521847 h; Athena Earth 66.497844255 → 17.750254565 h, a 48.747589690 h loss). They also cover every crossing (Blue Ghost sunset 20:10:39, Athena Earthset 18:29:52, Athena Earthrise 06:14:59), the 54 h 15 min → 53 h 15 min countdown, the zero-sample merge, and azimuth wrap across north.
+`npm test` runs 55 tests, and all pass. The first 16 cover the four presets. They reproduce the brief's full-precision totals for all four presets (Blue Ghost Sun 44.177521847 h; Athena Earth 66.497844255 → 17.750254565 h, a 48.747589690 h loss). They also cover every crossing (Blue Ghost sunset 20:10:39, Athena Earthset 18:29:52, Athena Earthrise 06:14:59), the 54 h 15 min → 53 h 15 min countdown, the zero-sample merge, and azimuth wrap across north.
 
 The other 12 cover the any-site engine:
 
@@ -104,7 +107,7 @@ The other 12 cover the any-site engine:
 - **The four preset files.** The table reproduces all 584 Sun and Earth directions within 0.006 degrees, the same hour totals within 0.02 h, and the same crossings within 2 minutes.
 - Stays outside 2024 to 2030 and bad coordinates are rejected. Far-side sites never see Earth.
 
-The next 13 cover the eclipse flag and the slip strip, and the last 6 cover the terrain margin. Both bars were set before the first run.
+The next 13 cover the eclipse flag and the slip strip, the next 6 cover the terrain margin, and the last 8 cover the mission need, the site table and the CSV. Every number in the site table and the CSV must equal the analysis it came from, and the verdict must be exact at the threshold. Both bars were set before the first run.
 
 - **Eclipse of Mar 14, 2025 at the Blue Ghost site.** The bar was 2 minutes from an earlier pilot result, 06:18 to 08:34 UTC. The model gives 06:18:09 to 08:35:15 UTC, so both edges pass. The window covers the reported whole-Moon totality, 06:26 to 07:31 UTC. It is about twice as long, because one site stays in Earth's shadow longer than the whole Moon stays fully covered.
 - Sunlit hours drop by the eclipse length and nothing else changes. The four preset stays show no eclipse and keep their numbers. A far-side site is not flagged.

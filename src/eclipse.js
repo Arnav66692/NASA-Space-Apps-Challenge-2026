@@ -2,7 +2,7 @@
 // On Earth the same event is a lunar eclipse. From the surface it is the Sun
 // going behind Earth, so sunlight stops even though the Sun is above the horizon.
 // Model: smooth sphere, disks compared by their angular radii, no atmosphere glow.
-// Written with an AI tool (Claude).
+// Written with an AI tool.
 import { skyAt } from './moonsky.js';
 
 const MINUTE_MS = 60_000;

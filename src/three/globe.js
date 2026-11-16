@@ -41,6 +41,41 @@ const LOOKS = {
   studio: { lunar: 0, studio: 1, relief: 0.3, exaggeration: 1.2, earthshine: 0.18, ambient: 0.16 },
 };
 const SUN_LIGHT = { color: 0xfff4e2, intensity: 3.2 };
+// ── heatmap ── Where to land: a lat/lon grid of hours (red = hours / 72, alpha = has a value) tints the
+// surface after lighting, so the day and night sides still read. The longitude comes from the
+// mesh position with the same frame as latLonToThree, so the tint sits exactly under the pins.
+const HEAT_PARS = `
+uniform sampler2D uHeatMap;
+uniform float uHeatOn;
+uniform float uHeatNeed;
+uniform vec2 uHeatGrid;
+varying vec3 vHeatPos;
+vec3 heatRamp(float t) {
+  vec3 c0 = vec3(0.24, 0.10, 0.42), c1 = vec3(0.46, 0.13, 0.52), c2 = vec3(0.74, 0.20, 0.47), c3 = vec3(0.95, 0.56, 0.23), c4 = vec3(1.0, 0.95, 0.69);
+  vec3 c = t < 0.25 ? mix(c0, c1, t / 0.25) : t < 0.5 ? mix(c1, c2, (t - 0.25) / 0.25) : t < 0.75 ? mix(c2, c3, (t - 0.5) / 0.25) : mix(c3, c4, (t - 0.75) / 0.25);
+  return pow(c, vec3(2.2));
+}`;
+const HEAT_FRAGMENT = `
+if (uHeatOn > 0.001) {
+  vec3 hp = normalize(vHeatPos);
+  float hLat = asin(clamp(hp.y, -1.0, 1.0));
+  float hLon = atan(-hp.z, hp.x);
+  vec2 huv = vec2(hLon / 6.28318531 + 0.5 / uHeatGrid.x, (hLat / 3.14159265 + 0.5) * (uHeatGrid.y - 1.0) / uHeatGrid.y + 0.5 / uHeatGrid.y);
+  vec4 hs = texture2D(uHeatMap, huv);
+  float known = smoothstep(0.35, 0.9, hs.a);
+  float hv = clamp(hs.r / max(hs.a, 0.001), 0.0, 1.0);
+  vec3 hSun = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
+  float hDay = smoothstep(-0.05, 0.25, dot(nonPerturbedNormal, hSun));
+  float hRelief = clamp(dot(normal, hSun) / max(dot(nonPerturbedNormal, hSun), 0.2), 0.65, 1.35);
+  float hShade = mix(0.3, 1.0, hDay) * mix(1.0, hRelief, hDay * 0.6);
+  // Keep the maria and craters readable through the tint.
+  float hAlb = clamp(sqrt(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))) / 0.42, 0.55, 1.3);
+  float hAlpha = mix(0.5, 0.72, smoothstep(0.0, 0.2, hv)) * known * uHeatOn;
+  outgoingLight = mix(outgoingLight, heatRamp(hv) * 0.85 * hShade * mix(1.0, hAlb, 0.7), hAlpha);
+  float hW = max(fwidth(hv), 0.0005);
+  float hLine = (1.0 - smoothstep(0.6, 1.6, abs(hv - uHeatNeed) / hW)) * known * step(0.001, uHeatNeed) * uHeatOn;
+  outgoingLight = mix(outgoingLight, vec3(0.2, 0.92, 1.0) * mix(0.45, 1.0, hDay), hLine * 0.9);
+}`;
 const AMBIENT = 0.035;
 
 function greatCircle(color, dashed) {
@@ -290,11 +325,23 @@ export function createGlobe(container, sites) {
     uSunDir: { value: new THREE.Vector3(1, 0, 0) },
     uSunColor: { value: new THREE.Color(SUN_LIGHT.color).multiplyScalar(SUN_LIGHT.intensity) },
   };
+  // ── heatmap ── uniforms. A 1 x 1 empty map until the first grid arrives.
+  const heatUniforms = {
+    uHeatMap: { value: new THREE.DataTexture(new Uint8Array(4), 1, 1) },
+    uHeatOn: { value: 0 },
+    uHeatNeed: { value: 0 },
+    uHeatGrid: { value: new THREE.Vector2(1, 1) },
+  };
+  heatUniforms.uHeatMap.value.needsUpdate = true;
   moon.material.dithering = true; // no visible steps in the dark side's slow falloff
   moon.material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, sunUniforms);
+    Object.assign(shader.uniforms, sunUniforms, heatUniforms); // ── heatmap ──
+    shader.vertexShader = shader.vertexShader // ── heatmap ──
+      .replace('#include <common>', '#include <common>\nvarying vec3 vHeatPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeatPos = position;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform float uLunar;\nuniform float uStudio;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform float uLunar;\nuniform float uStudio;\n' + HEAT_PARS)
+      .replace('#include <opaque_fragment>', HEAT_FRAGMENT + '\n#include <opaque_fragment>') // ── heatmap ──
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
@@ -631,6 +678,7 @@ export function createGlobe(container, sites) {
     ambient.intensity = isHome ? HOME.ambient : LOOKS[look].ambient;
     sunUniforms.uSunColor.value.set(SUN_LIGHT.color).multiplyScalar(SUN_LIGHT.intensity * (isHome ? HOME.sunBoost : 1));
     for (const overlay of [grat, term, limb, earth, pinGroup]) overlay.visible = !isHome;
+    applyHeatOn(); // ── heatmap ── never on the home crescent
     resize();
     if (isHome) {
       setHomeBasis();
@@ -670,6 +718,70 @@ export function createGlobe(container, sites) {
     homeView.ty = -y;
   }
 
+  // ── heatmap ──
+  let heatOn = false;
+  function applyHeatOn() {
+    heatUniforms.uHeatOn.value = heatOn && mode !== 'home' ? 1 : 0;
+  }
+  /**
+   * Show or hide the where-to-land tint. bytes: RGBA rows from the south pole up, cols from 0° E
+   * eastward (see src/heatmap.js heatBytes). Leave bytes out to keep the current map.
+   * @param {{on: boolean, bytes?: Uint8Array|null, rows?: number, cols?: number, needHours?: number, maxHours?: number}} p
+   */
+  function setHeatmap({ on, bytes, rows, cols, needHours, maxHours = 72 }) {
+    if (bytes && rows > 0 && cols > 0 && bytes.length === rows * cols * 4) {
+      const old = heatUniforms.uHeatMap.value;
+      if (old.image.width === cols && old.image.height === rows) {
+        old.image.data.set(bytes);
+        old.needsUpdate = true;
+      } else {
+        const tex = new THREE.DataTexture(new Uint8Array(bytes), cols, rows, THREE.RGBAFormat, THREE.UnsignedByteType);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.magFilter = THREE.LinearFilter;
+        tex.minFilter = THREE.LinearFilter;
+        tex.generateMipmaps = false;
+        tex.needsUpdate = true;
+        heatUniforms.uHeatMap.value = tex;
+        heatUniforms.uHeatGrid.value.set(cols, rows);
+        old.dispose();
+      }
+    }
+    if (Number.isFinite(needHours)) heatUniforms.uHeatNeed.value = Math.min(Math.max(needHours / maxHours, 0), 1);
+    heatOn = Boolean(on);
+    applyHeatOn();
+    loop.invalidate();
+  }
+
+  // ── heatmap ── hover readout: where the pointer meets the Moon, by a ray and sphere test (no mesh raycast).
+  let heatHover = null;
+  const hoverRay = new THREE.Raycaster();
+  const hoverNdc = new THREE.Vector2();
+  const hoverSphere = new THREE.Sphere(new THREE.Vector3(), 1);
+  const hoverHit = new THREE.Vector3();
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (!heatHover || !heatOn || mode === 'home') return;
+    const r = renderer.domElement.getBoundingClientRect();
+    hoverNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    hoverRay.setFromCamera(hoverNdc, camera);
+    if (!hoverRay.ray.intersectSphere(hoverSphere, hoverHit)) return heatHover(null);
+    const lat = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(hoverHit.y, -1, 1)));
+    const lonE = (THREE.MathUtils.radToDeg(Math.atan2(-hoverHit.z, hoverHit.x)) + 360) % 360;
+    heatHover({ lat, lonE, x: e.clientX - r.left, y: e.clientY - r.top });
+  });
+  renderer.domElement.addEventListener('pointerleave', () => heatHover?.(null));
+  /** cb({lat, lonE, x, y}) while the pointer is over the Moon with the heatmap on, cb(null) when it leaves. */
+  function onHeatHover(cb) {
+    heatHover = cb;
+  }
+
+  /** Where a surface point lands on the page, in CSS pixels. For the heatmap checks. */
+  function screenOf(lat, lonE) {
+    const v = latLonToThree(lat, lonE, 1).project(camera);
+    const r = renderer.domElement.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height, front: v.z < 1 };
+  }
+
   resize();
-  return { update, setMode, setPointer, setLook };
+  return { update, setMode, setPointer, setLook, setHeatmap, screenOf, onHeatHover };
 }
